@@ -1,0 +1,26 @@
+/* EventTimeline transition animations (react-transition-group classNames="event") */
+@keyframes event-entry {
+  0%   { opacity: 0; transform: translateY(-10px) scaleY(0.55); filter: brightness(2.2); }
+  35%  { opacity: 1; transform: translateY(3px)   scaleY(1.03); filter: brightness(1.4); }
+  65%  { transform: translateY(-1px) scaleY(1);                 filter: brightness(1.1); }
+  100% { transform: translateY(0)   scaleY(1);                  filter: brightness(1);   }
+}
+
+.event-enter { opacity: 0; }
+.event-enter-active {
+  animation: event-entry 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: top center;
+}
+.event-exit { opacity: 1; }
+.event-exit-active {
+  opacity: 0;
+  transform: translateX(12px) scaleX(0.96);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* HITL pulse-slow */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.95; }
+}
+.animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }

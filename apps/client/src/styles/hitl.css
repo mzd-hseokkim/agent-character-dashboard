@@ -1,0 +1,153 @@
+/* ── HITL Overlay (portal → body) ── */
+.hitl-stack {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  z-index: 9990;
+  max-width: 340px;
+  pointer-events: none;
+}
+
+.hitl-card {
+  pointer-events: all;
+  background: #080f08;
+  border: 1px solid #3a5038;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(90,152,64,0.12);
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+.hitl-card.permission {
+  border-color: #5a3880;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.85), 0 0 20px rgba(100,56,160,0.35);
+  animation: hitl-glow 2.2s ease-in-out infinite;
+}
+@keyframes hitl-glow {
+  0%, 100% { box-shadow: 0 16px 48px rgba(0,0,0,0.85), 0 0 14px rgba(100,56,160,0.25); }
+  50%       { box-shadow: 0 16px 48px rgba(0,0,0,0.85), 0 0 28px rgba(130,80,210,0.5); }
+}
+
+.hitl-hdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #0d1a0d;
+  border-bottom: 1px solid #1a2818;
+}
+.hitl-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(100,56,160,0.15);
+  color: #9870d8;
+  border: 1px solid rgba(100,56,160,0.3);
+  white-space: nowrap;
+}
+.hitl-card:not(.permission) .hitl-badge {
+  background: rgba(90,152,64,0.12);
+  color: #5a9840;
+  border-color: rgba(90,152,64,0.25);
+}
+.hitl-agent {
+  flex: 1;
+  font-size: 9px;
+  font-family: monospace;
+  color: #3a5038;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hitl-countdown {
+  font-size: 9px;
+  font-family: monospace;
+  color: #7a6020;
+  flex-shrink: 0;
+}
+.hitl-countdown.urgent { color: #c05030; animation: hitl-blink 0.8s step-end infinite; }
+@keyframes hitl-blink { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
+
+.hitl-body {
+  padding: 10px 12px;
+  border-bottom: 1px solid #141c14;
+}
+.hitl-question {
+  font-size: 11px;
+  color: #8aa888;
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.hitl-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  flex-wrap: wrap;
+}
+.hitl-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s;
+  border: 1px solid transparent;
+}
+.hitl-btn.allow {
+  background: rgba(50,130,25,0.15);
+  color: #70c040;
+  border-color: rgba(50,130,25,0.35);
+}
+.hitl-btn.allow:hover {
+  background: rgba(50,130,25,0.28);
+  box-shadow: 0 0 14px rgba(60,200,40,0.28);
+}
+.hitl-btn.deny {
+  background: rgba(150,45,25,0.15);
+  color: #d05040;
+  border-color: rgba(150,45,25,0.35);
+}
+.hitl-btn.deny:hover {
+  background: rgba(150,45,25,0.28);
+  box-shadow: 0 0 14px rgba(200,50,30,0.28);
+}
+.hitl-btn.choice {
+  background: rgba(50,90,160,0.15);
+  color: #7090d0;
+  border-color: rgba(50,90,160,0.3);
+}
+.hitl-btn.choice:hover { background: rgba(50,90,160,0.28); }
+
+.hitl-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  background: #0d1210;
+  border: 1px solid #243022;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #8aa888;
+  outline: none;
+}
+.hitl-input:focus { border-color: #3a6830; }
+
+/* react-transition-group CSSTransition classNames="hitl" */
+.hitl-enter { opacity: 0; transform: translateX(24px) scale(0.95); }
+.hitl-enter-active { transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.hitl-exit { opacity: 1; }
+.hitl-exit-active { opacity: 0; transform: translateX(24px) scale(0.95); transition: opacity 0.15s ease, transform 0.15s ease; }

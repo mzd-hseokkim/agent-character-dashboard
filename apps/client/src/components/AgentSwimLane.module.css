@@ -1,0 +1,123 @@
+.agentSwimLane {
+  width: 100%;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.laneHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 7px;
+  gap: 8px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agentLabelContainer {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+}
+
+.agentLabelApp,
+.agentLabelSession {
+  padding: 8px 8px;
+  border-radius: 0;
+  border: 1px solid currentColor;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.agentLabelApp {
+  border-radius: 3px 0 0 3px;
+}
+
+.agentLabelSession {
+  border-radius: 0 3px 3px 0;
+  border-left: none;
+}
+
+.modelBadge,
+.eventCountBadge,
+.toolCallBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px;
+  background: var(--theme-bg-tertiary);
+  border: 1px solid var(--theme-border-primary);
+  border-radius: 8px;
+  color: var(--theme-text-primary);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  min-height: 28px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.modelBadge {
+  cursor: default;
+}
+
+.eventCountBadge:hover,
+.toolCallBadge:hover,
+.modelBadge:hover {
+  background: var(--theme-bg-quaternary);
+  border-color: var(--theme-primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.avgTimeBadge {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--theme-text-tertiary);
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  background: var(--theme-bg-quaternary);
+  color: var(--theme-text-primary);
+  transform: scale(1.1);
+}
+
+.chartWrapper {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--theme-border-primary);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--theme-bg-tertiary);
+}

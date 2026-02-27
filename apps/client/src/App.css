@@ -1,0 +1,66 @@
+/* ── Header ─────────────────────────────────────────── */
+.frieren-header {
+  background: #090d09;
+  border-bottom: 1px solid #1c2820;
+  flex-shrink: 0;
+}
+.header-inner {
+  padding: 9px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-accent-bar {
+  width: 2px; height: 22px; border-radius: 2px;
+  background: linear-gradient(to bottom, #3a8020, #6ab840);
+}
+.header-title {
+  font-size: 14px; font-weight: 600; letter-spacing: 0.05em;
+  color: #8aa888;
+}
+.tab-group { display: flex; gap: 3px; }
+.tab-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 6px;
+  font-size: 12px; font-weight: 500;
+  transition: all 0.15s; cursor: pointer;
+  border: 1px solid transparent;
+  color: #3a5038; background: transparent;
+}
+.tab-active  { background: #141e14; color: #8aa888; border-color: #243022; }
+.tab-inactive:hover { color: #6a8868; background: #0f1610; }
+.header-text-dim { color: #3a5038; font-size: 11px; }
+.header-count {
+  font-size: 10px; font-family: monospace;
+  color: #4a6848; background: #0f1610;
+  border: 1px solid #1c2820;
+  padding: 3px 10px; border-radius: 20px;
+}
+.header-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px;
+  color: #3a5038; border: 1px solid #1c2820;
+  transition: all 0.15s; cursor: pointer; background: transparent;
+  padding: 0;
+}
+.header-btn:hover { color: #8aa888; background: #141e14; border-color: #2a3828; }
+.header-btn-muted { color: #2a3028; }
+
+/* ── Tab pane ─────────────────────────────────────── */
+.tab-pane {
+  position: absolute; inset: 0; overflow: hidden;
+}
+
+/* ── Tab switch transition ── */
+@keyframes tab-in {
+  0%   { opacity: 0; filter: brightness(2.2); transform: scaleX(0.97); }
+  40%  { opacity: 1; filter: brightness(1.3); transform: scaleX(1.01); }
+  100% { filter: brightness(1); transform: scaleX(1); }
+}
+.tab-switch-enter        { opacity: 0; }
+.tab-switch-enter-active {
+  animation: tab-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: center center;
+}
+.tab-switch-exit         { opacity: 1; }
+.tab-switch-exit-active  { opacity: 0; transition: opacity 0.12s ease; }
