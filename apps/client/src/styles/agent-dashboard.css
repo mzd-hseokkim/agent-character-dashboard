@@ -7,6 +7,44 @@
 .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; }
 .empty-text  { font-size: 13px; color: #3a5038; font-style: italic; }
 
+/* ══ Dashboard toolbar ══════════════════════════════ */
+.dashboard-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 10px;
+  border-bottom: 1px solid #141e14;
+  background: #0a0f0a;
+}
+
+.view-mode-toggle {
+  display: flex;
+  gap: 2px;
+  background: #0d1117;
+  border: 1px solid #1a2318;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #3a5038;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-mode-btn:hover { color: #6a8868; background: #0f1610; }
+.view-mode-btn.active { background: #141e14; color: #8aa888; }
+
 /* ══ Columns container ══════════════════════════════ */
 .columns-container {
   flex: 1; display: flex; flex-direction: row;

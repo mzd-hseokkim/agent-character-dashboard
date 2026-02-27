@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef, createRef } from 'react';
 import { TransitionGroup, CSSTransition } from 'react-transition-group';
+import { AlignJustify, LayoutGrid } from 'lucide-react';
 import { useSoundStore } from '../../stores/useSoundStore';
 import { AgentColumn } from './AgentColumn';
 import { FeedTooltip } from './FeedTooltip';
@@ -8,6 +9,8 @@ import type { AgentState, AgentStatus } from '../../stores/useWebSocketStore';
 import type { HookEvent } from '../../types';
 import { API_BASE_URL } from '../../config';
 import '../../styles/agent-dashboard.css';
+
+export type ViewMode = 'detail' | 'card';
 
 interface Props {
   agentStates: Record<string, AgentState>;
@@ -21,6 +24,7 @@ export function AgentDashboard({ agentStates, events }: Props) {
   const [tick, setTick] = useState(0);
   const [celebratingKeys, setCelebratingKeys] = useState(new Set<string>());
   const [tip, setTip] = useState<TipState>({ visible: false, x: 0, y: 0, ev: null });
+  const [viewMode, setViewMode] = useState<ViewMode>('detail');
 
   const celebrateTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const colRefsRef = useRef(new Map<string, React.RefObject<HTMLDivElement | null>>());
@@ -140,6 +144,27 @@ export function AgentDashboard({ agentStates, events }: Props) {
 
   return (
     <div className="console-layout">
+      <div className="dashboard-toolbar">
+        <div className="view-mode-toggle">
+          <button
+            className={`view-mode-btn${viewMode === 'detail' ? ' active' : ''}`}
+            onClick={() => setViewMode('detail')}
+            title="상세 뷰 — 카드 + 작업목록"
+          >
+            <AlignJustify size={12} />
+            상세
+          </button>
+          <button
+            className={`view-mode-btn${viewMode === 'card' ? ' active' : ''}`}
+            onClick={() => setViewMode('card')}
+            title="카드 뷰 — 카드만"
+          >
+            <LayoutGrid size={12} />
+            카드
+          </button>
+        </div>
+      </div>
+
       {mainAgents.length === 0 ? (
         <div className="empty-state">
           <div className="empty-text">에이전트 연결 대기 중...</div>
@@ -157,6 +182,7 @@ export function AgentDashboard({ agentStates, events }: Props) {
                   events={events}
                   tick={tick}
                   celebrating={celebratingKeys.has(key)}
+                  viewMode={viewMode}
                   onCycleCharacter={() => handleCycleCharacter(key)}
                   onMouseEnterFeedItem={handleMouseEnterFeedItem}
                   onMouseLeaveFeedItem={handleMouseLeaveFeedItem}

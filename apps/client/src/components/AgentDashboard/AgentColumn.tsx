@@ -3,6 +3,7 @@ import { AgentCard } from './AgentCard';
 import { FeedItem } from './FeedItem';
 import type { AgentState, AgentStatus } from '../../stores/useWebSocketStore';
 import type { HookEvent } from '../../types';
+import type { ViewMode } from './AgentDashboard';
 
 function splitKey(key: string): [string, string] {
   const idx = key.lastIndexOf(':');
@@ -30,13 +31,14 @@ interface Props {
   events: HookEvent[];
   tick: number;
   celebrating: boolean;
+  viewMode: ViewMode;
   onCycleCharacter: () => void;
   onMouseEnterFeedItem: (el: HTMLElement, ev: HookEvent) => void;
   onMouseLeaveFeedItem: () => void;
 }
 
 export const AgentColumn = forwardRef<HTMLDivElement, Props>(function AgentColumn(
-  { agentKey, agent, events, tick, celebrating,
+  { agentKey, agent, events, tick, celebrating, viewMode,
     onCycleCharacter, onMouseEnterFeedItem, onMouseLeaveFeedItem },
   ref
 ) {
@@ -53,26 +55,28 @@ export const AgentColumn = forwardRef<HTMLDivElement, Props>(function AgentColum
         onCycleCharacter={onCycleCharacter}
       />
 
-      <div className="col-feed">
-        {agentEvents.length === 0 ? (
-          <div className="feed-empty">이벤트 대기 중...</div>
-        ) : (
-          <div className="feed-items">
-            {agentEvents.map(ev => {
-              const key = `${ev.id ?? ev.timestamp ?? 0}-${ev.hook_event_type}`;
-              return (
-                <FeedItem
-                  key={key}
-                  ev={ev}
-                  isHitlActive={isHitlShown(agent, ev, agentEvents)}
-                  onMouseEnter={onMouseEnterFeedItem}
-                  onMouseLeave={onMouseLeaveFeedItem}
-                />
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {viewMode === 'detail' && (
+        <div className="col-feed">
+          {agentEvents.length === 0 ? (
+            <div className="feed-empty">이벤트 대기 중...</div>
+          ) : (
+            <div className="feed-items">
+              {agentEvents.map(ev => {
+                const key = `${ev.id ?? ev.timestamp ?? 0}-${ev.hook_event_type}`;
+                return (
+                  <FeedItem
+                    key={key}
+                    ev={ev}
+                    isHitlActive={isHitlShown(agent, ev, agentEvents)}
+                    onMouseEnter={onMouseEnterFeedItem}
+                    onMouseLeave={onMouseLeaveFeedItem}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });

@@ -93,7 +93,7 @@ export default function App() {
           <div className="flex items-center gap-6 mobile:hidden">
             <div className="flex items-center gap-3">
               <div className="header-accent-bar" />
-              <h1 className="header-title">Party Observability</h1>
+              <h1 className="header-title">Agent Monitor</h1>
             </div>
             <div className="tab-group">
               <button
