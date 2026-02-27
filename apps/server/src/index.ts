@@ -47,7 +47,15 @@ const pendingTaskQueues = new Map<string, string[]>();
 function getOrAssignCharacter(agentKey: string): string {
   const existing = agentStates.get(agentKey);
   if (existing) return existing.characterId;
-  return DEFAULT_CHARACTER_IDS[characterCounter++ % DEFAULT_CHARACTER_IDS.length];
+
+  // DB에서 이전에 할당된 캐릭터 조회 (재접속 시 동일 캐릭터 유지)
+  const row = db.prepare('SELECT character_id FROM agent_characters WHERE agent_key = ?').get(agentKey) as { character_id: string } | null;
+  if (row) return row.character_id;
+
+  // 신규 에이전트: 새 캐릭터 배정 후 DB에 저장
+  const characterId = DEFAULT_CHARACTER_IDS[characterCounter++ % DEFAULT_CHARACTER_IDS.length];
+  db.prepare('INSERT INTO agent_characters (agent_key, character_id) VALUES (?, ?)').run(agentKey, characterId);
+  return characterId;
 }
 
 const READING_TOOLS = new Set([
@@ -390,9 +398,12 @@ const server = Bun.serve({
         }
         const currentIdx = CHARACTER_IDS.indexOf(state.characterId);
         const nextIdx = (currentIdx + 1) % CHARACTER_IDS.length;
-        agentStates.set(agentKey, { ...state, characterId: CHARACTER_IDS[nextIdx] });
+        const nextCharId = CHARACTER_IDS[nextIdx];
+        agentStates.set(agentKey, { ...state, characterId: nextCharId });
+        // DB에도 반영하여 재접속 시 수동 변경 사항 유지
+        db.prepare('INSERT OR REPLACE INTO agent_characters (agent_key, character_id) VALUES (?, ?)').run(agentKey, nextCharId);
         broadcastAgentStates();
-        return new Response(JSON.stringify({ characterId: CHARACTER_IDS[nextIdx] }), {
+        return new Response(JSON.stringify({ characterId: nextCharId }), {
           headers: { ...headers, 'Content-Type': 'application/json' }
         });
       } catch {

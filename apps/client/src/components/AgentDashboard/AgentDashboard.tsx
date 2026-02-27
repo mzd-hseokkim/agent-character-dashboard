@@ -149,7 +149,7 @@ export function AgentDashboard({ agentStates, events }: Props) {
           {mainAgents.map(([key, agent]) => {
             const nodeRef = getColRef(key);
             return (
-              <CSSTransition key={key} nodeRef={nodeRef as React.RefObject<HTMLDivElement>} timeout={{ enter: 450, exit: 0 }} classNames="agent-col">
+              <CSSTransition key={key} nodeRef={nodeRef as React.RefObject<HTMLDivElement>} timeout={{ enter: 720, exit: 580 }} classNames="agent-col">
                 <AgentColumn
                   ref={nodeRef}
                   agentKey={key}

@@ -65,6 +65,14 @@ export function initDatabase(): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_hook_event_type ON events(hook_event_type)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp)');
   
+  // Create agent_characters table for persistent character assignment
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_characters (
+      agent_key TEXT PRIMARY KEY,
+      character_id TEXT NOT NULL
+    )
+  `);
+
   // Create themes table
   db.exec(`
     CREATE TABLE IF NOT EXISTS themes (

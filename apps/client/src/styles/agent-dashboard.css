@@ -178,17 +178,55 @@
   65%       { transform: translateY(-5px) scale(1.02); }
 }
 
-/* ── Agent column transition (react-transition-group classNames="agent-col") ── */
+/* ── Agent column transition — superhero landing ── */
 @keyframes agent-col-entry {
-  0%   { opacity: 0; transform: translateX(28px) scaleX(0.88); filter: brightness(2.5); }
-  40%  { opacity: 1; transform: translateX(-3px) scaleX(1.02); filter: brightness(1.4); }
-  70%  { transform: translateX(1px) scaleX(1);                 filter: brightness(1.1); }
-  100% { transform: translateX(0)   scaleX(1);                 filter: brightness(1);   }
+  /* Off-screen above, blurred streak */
+  0%   { opacity: 0; transform: translateY(-108%) scaleX(0.90); filter: brightness(4) blur(3px) saturate(0.3); }
+  /* Enters visible area, still falling fast */
+  12%  { opacity: 1; filter: brightness(2.5) blur(0); }
+  /* Just before impact */
+  46%  { transform: translateY(-3%) scaleY(1.05) scaleX(0.96); filter: brightness(1.8); }
+  /* ★ IMPACT — squish into ground */
+  55%  { transform: translateY(0) scaleY(0.78) scaleX(1.14);
+         filter: brightness(3) saturate(2.4);
+         box-shadow: 0 6px 48px rgba(80,200,40,0.75), inset 0 -4px 24px rgba(80,200,40,0.3); }
+  /* Rebound — shoots back up */
+  70%  { transform: translateY(-7%) scaleY(1.12) scaleX(0.94); filter: brightness(1.35); box-shadow: none; }
+  /* Second land — smaller squish */
+  81%  { transform: translateY(0) scaleY(0.95) scaleX(1.04); filter: brightness(1.1); }
+  /* Micro wobble */
+  91%  { transform: translateY(-1.5%) scaleY(1.02) scaleX(0.99); }
+  /* Settled */
+  100% { transform: translateY(0) scaleY(1) scaleX(1); filter: brightness(1); box-shadow: none; }
 }
-.agent-col-enter { opacity: 0; }
+.agent-col-enter { opacity: 0; transform: translateY(-108%); }
 .agent-col-enter-active {
-  animation: agent-col-entry 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  transform-origin: left center;
+  animation: agent-col-entry 0.72s linear forwards;
+  transform-origin: center bottom;
+}
+
+/* ── Agent column exit — CRT power-off ── */
+@keyframes agent-col-exit {
+  /* 전원 서지 — 순간 밝아짐 */
+  0%   { opacity: 1; filter: brightness(1) saturate(1); transform: scaleY(1) scaleX(1); }
+  10%  { filter: brightness(2.4) saturate(0.25); transform: scaleY(1.015) scaleX(0.995); }
+  /* 전력 차단 — 급격히 어두워짐 */
+  24%  { filter: brightness(0.06) saturate(0); transform: scaleY(1) scaleX(1); }
+  /* 암전 유지 */
+  38%  { filter: brightness(0) saturate(0); transform: scaleY(1) scaleX(1); opacity: 1; }
+  /* ★ CRT 수평 붕괴 — 중앙으로 수직 압축 */
+  56%  { filter: brightness(4) saturate(0); transform: scaleY(0.06) scaleX(1.07); opacity: 1; }
+  /* 수평선 플래시 */
+  70%  { filter: brightness(6) saturate(0); transform: scaleY(0.018) scaleX(1.12); opacity: 0.9; }
+  /* 소멸 */
+  86%  { filter: brightness(2); transform: scaleY(0.006) scaleX(1.09); opacity: 0.5; }
+  100% { opacity: 0; transform: scaleY(0) scaleX(1); filter: brightness(0); }
+}
+.agent-col-exit { opacity: 1; }
+.agent-col-exit-active {
+  animation: agent-col-exit 0.58s ease-in forwards;
+  transform-origin: center center;
+  pointer-events: none;
 }
 
 /* ── Current action ── */
