@@ -83,6 +83,22 @@ const PREDEFINED_THEMES: Record<ThemeName, PredefinedTheme> = {
 const camelToKebab = (str: string) =>
   str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
 
+/** 색상 맵을 --theme-* CSS 변수로 :root에 인라인 적용 */
+export function applyColorSetToRoot(colors: Record<string, string>): void {
+  const root = document.documentElement;
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--theme-${camelToKebab(key)}`, value);
+  });
+}
+
+/** 인라인 --theme-* CSS 변수 전체 제거 */
+export function clearColorSetFromRoot(): void {
+  const root = document.documentElement;
+  Array.from(root.style).filter(p => p.startsWith('--theme-')).forEach(p => {
+    root.style.removeProperty(p);
+  });
+}
+
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const isValidColor = (color: string): boolean =>
@@ -124,6 +140,7 @@ interface ThemeStore {
 
   // core
   setTheme: (theme: ThemeName | string) => void;
+  toggleDarkMode: () => void;
   validateTheme: (colors: Partial<ThemeColors>) => ThemeValidationResult;
   initializeTheme: () => void;
 
@@ -150,7 +167,8 @@ interface ThemeStore {
 
 export const useThemeStore = create<ThemeStore>((set, get) => ({
   state: {
-    currentTheme: 'light',
+    currentTheme: 'dark',
+    isDarkMode: true,
     customThemes: [],
     isCustomTheme: false,
     isLoading: false,
@@ -172,6 +190,26 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
   },
 
   predefinedThemes: () => Object.values(PREDEFINED_THEMES),
+
+  toggleDarkMode: () => {
+    const { state } = get();
+    const next = !state.isDarkMode;
+    if (next) {
+      // 다크 모드: 모든 theme 클래스 제거 → :root Console Dark 적용
+      document.documentElement.className = document.documentElement.className
+        .replace(/theme-[\w-]+/g, '').trim();
+      document.documentElement.classList.remove('dark');
+      localStorage.removeItem('theme');
+      set(s => ({ state: { ...s.state, isDarkMode: true, currentTheme: 'dark', isCustomTheme: false } }));
+    } else {
+      // 라이트 모드: theme-light 클래스 추가
+      document.documentElement.className = document.documentElement.className
+        .replace(/theme-[\w-]+/g, '').trim();
+      document.documentElement.classList.add('theme-light');
+      localStorage.setItem('theme', 'light');
+      set(s => ({ state: { ...s.state, isDarkMode: false, currentTheme: 'light', isCustomTheme: false } }));
+    }
+  },
 
   setTheme: (theme) => {
     const { state } = get();
@@ -210,13 +248,23 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     } catch { /* ignore */ }
 
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme && savedTheme !== 'light' && savedTheme !== 'sunlit-meadow') {
+    if (savedTheme === 'light') {
+      // 라이트 모드 복원
+      document.documentElement.className = document.documentElement.className
+        .replace(/theme-[\w-]+/g, '').trim();
+      document.documentElement.classList.add('theme-light');
+      set(s => ({ state: { ...s.state, currentTheme: 'light', isDarkMode: false } }));
+    } else if (savedTheme && savedTheme !== 'sunlit-meadow') {
+      // 기타 커스텀 테마 복원
       get().setTheme(savedTheme);
+      set(s => ({ state: { ...s.state, isDarkMode: true } }));
     } else {
+      // 기본값: Console Dark (theme 클래스 없음, :root 사용)
       document.documentElement.className = document.documentElement.className
         .replace(/theme-[\w-]+/g, '').trim();
       document.documentElement.classList.remove('dark');
       localStorage.removeItem('theme');
+      set(s => ({ state: { ...s.state, currentTheme: 'dark', isDarkMode: true } }));
     }
   },
 

@@ -81,6 +81,8 @@ export interface Theme {
   displayName: string;
   description?: string;
   colors: ThemeColors;
+  lightColors?: ThemeColors;
+  darkColors?: ThemeColors;
   isPublic: boolean;
   authorId?: string;
   authorName?: string;
@@ -90,6 +92,26 @@ export interface Theme {
   downloadCount?: number;
   rating?: number;
   ratingCount?: number;
+}
+
+export interface ThemeCharacter {
+  id: string;
+  themeId: string;
+  characterId: string;   // 'luna', 'rex' 등 (에이전트에 배정되는 ID)
+  displayName: string;   // 'Luna', 'Rex'
+  spritePrefix: string;  // 'LUNA', 'REX' (파일명 prefix)
+  sortOrder: number;
+  createdAt: number;
+}
+
+export interface CharacterSprite {
+  id: string;
+  characterId: string;   // FK → theme_characters.id
+  status: string;        // FORCE(필수) | FINISH | OFFLINE | READING | REST | THINK(선택)
+  filePath: string;      // uploads/ 기준 상대 경로
+  fileSize: number;
+  mimeType: string;
+  createdAt: number;
 }
 
 export interface ThemeSearchQuery {

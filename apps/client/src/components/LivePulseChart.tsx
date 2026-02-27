@@ -223,6 +223,7 @@ export function LivePulseChart({ events, filters, onUpdateUniqueApps, onUpdateAl
     return () => {
       stopped = true;
       clearData();
+      processedEventIds.current.clear();
       rendererRef.current?.stopAnimation();
       resizeObserverRef.current?.disconnect();
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -276,24 +277,24 @@ export function LivePulseChart({ events, filters, onUpdateUniqueApps, onUpdateAl
             <Activity size={16} className="flex-shrink-0" />
             <span className="mobile:hidden">Live Activity Pulse</span>
           </h3>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-gradient-to-r from-[var(--theme-primary)]/10 to-[var(--theme-primary-light)]/10 rounded-lg border border-[var(--theme-primary)]/30 shadow-sm" title={`${uniqueAgentCount} active agent${uniqueAgentCount !== 1 ? 's' : ''}`}>
-              <Users size={15} className="flex-shrink-0" />
+              <Users size={15} className="flex-shrink-0 text-[var(--theme-primary)]" />
               <span className="text-sm mobile:text-xs font-bold text-[var(--theme-primary)]">{uniqueAgentCount}</span>
               <span className="text-xs mobile:text-[10px] text-[var(--theme-text-tertiary)] font-medium mobile:hidden">agents</span>
             </div>
             <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--theme-bg-tertiary)] rounded-lg border border-[var(--theme-border-primary)] shadow-sm" title={`Total events in the last ${rangeLabel(timeRange)}`}>
-              <Zap size={15} className="flex-shrink-0" />
+              <Zap size={15} className="flex-shrink-0 text-[var(--theme-text-primary)]" />
               <span className="text-sm mobile:text-xs font-bold text-[var(--theme-text-primary)]">{totalEventCount}</span>
               <span className="text-xs mobile:text-[10px] text-[var(--theme-text-tertiary)] font-medium mobile:hidden">events</span>
             </div>
             <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--theme-bg-tertiary)] rounded-lg border border-[var(--theme-border-primary)] shadow-sm" title={`Total tool calls in the last ${rangeLabel(timeRange)}`}>
-              <Wrench size={15} className="flex-shrink-0" />
+              <Wrench size={15} className="flex-shrink-0 text-[var(--theme-text-primary)]" />
               <span className="text-sm mobile:text-xs font-bold text-[var(--theme-text-primary)]">{toolCallCount}</span>
               <span className="text-xs mobile:text-[10px] text-[var(--theme-text-tertiary)] font-medium mobile:hidden">tools</span>
             </div>
             <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--theme-bg-tertiary)] rounded-lg border border-[var(--theme-border-primary)] shadow-sm" title={`Average time between events in the last ${rangeLabel(timeRange)}`}>
-              <Clock size={15} className="flex-shrink-0" />
+              <Clock size={15} className="flex-shrink-0 text-[var(--theme-text-primary)]" />
               <span className="text-sm mobile:text-xs font-bold text-[var(--theme-text-primary)]">{formatGap(eventTimingMetrics.avgGap)}</span>
               <span className="text-xs mobile:text-[10px] text-[var(--theme-text-tertiary)] font-medium mobile:hidden">avg gap</span>
             </div>

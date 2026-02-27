@@ -1,5 +1,6 @@
 import { useRef, useEffect, useMemo } from 'react';
 import type { AgentStatus } from '../stores/useWebSocketStore';
+import { useGetGifUrl } from '../hooks/useCharacters';
 
 interface Props {
   characterId: string;
@@ -19,12 +20,6 @@ const STATUS_TO_GIF: Record<AgentStatus, string> = {
   OFFLINE:       'OFFLINE',
 };
 
-const GIF_CHARS: Record<string, string> = {
-  frieren: 'FRIEREN',
-  fern: 'FERN',
-  stark: 'STARK',
-  himmel: 'HIMMEL',
-};
 
 const PALETTES: Record<string, { body: string; hair: string; accent: string }> = {
   char_a: { body: '#5b8dd9', hair: '#f5c842', accent: '#e05c5c' },
@@ -108,11 +103,8 @@ const BG_COLORS: Record<AgentStatus, string> = {
 };
 
 export function SpriteCanvas({ characterId, status, size }: Props) {
-  const gifSrc = useMemo(() => {
-    const prefix = GIF_CHARS[characterId];
-    if (!prefix) return null;
-    return `/sprites/${characterId}/${prefix}_${STATUS_TO_GIF[status]}.gif`;
-  }, [characterId, status]);
+  const getGifUrl = useGetGifUrl();
+  const gifSrc = useMemo(() => getGifUrl(characterId, status), [getGifUrl, characterId, status]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);

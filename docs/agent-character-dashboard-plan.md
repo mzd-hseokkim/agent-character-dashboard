@@ -1,6 +1,6 @@
 # Agent Character Dashboard 구현 계획
 
-> Claude Code 에이전트들의 상태를 도트 캐릭터로 시각화하는 대시보드
+> Claude Code 에이전트들의 상태를 도트 캐릭터로 시각화하는 실시간 대시보드
 
 ---
 
@@ -15,18 +15,114 @@ Claude Code 에이전트(터미널 인스턴스)별로 고유한 도트 캐릭�
 
 [claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability)
 
-**이 프로젝트를 베이스로 쓰는 이유:**
+---
 
-- 훅 스크립트 12종 완성 (PreToolUse, PostToolUse, Stop 등)
-- Bun 서버 + SQLite + WebSocket 인프라 완성
-- Vue 3 클라이언트 기반 존재
-- 글로벌 `~/.claude/settings.json` 적용으로 모든 프로젝트 자동 수집 가능
+## 현재 상태 (2026-02-28)
 
-**수정/추가할 것:**
+### 완료된 작업
 
-- 기존 이벤트 타임라인 UI → 캐릭터 대시보드 UI로 교체 또는 병행
-- 에이전트 상태 추적 로직 추가
-- 스프라이트 시트 렌더링 컴포넌트 추가
+#### Phase 0: 환경 세팅
+- [x] 베이스 프로젝트 기반 구축
+- [x] Bun + SQLite + WebSocket 서버 (`apps/server/`)
+- [x] 훅 스크립트 Python으로 전환 (Windows 호환, UTF-8 안정성)
+  - `.claude/hooks/send_event.py`
+  - `session_id`는 stdin payload JSON에서 추출 (환경변수 아님)
+- [x] `~/.claude/settings.json` 글로벌 훅 적용
+
+#### Phase 1: Vue → React 마이그레이션 (완료)
+- [x] Vue 3 클라이언트 → React 19 + Vite + Tailwind + Zustand
+- [x] 기존 Vue 클라이언트 `apps/client-vue/`로 아카이빙
+- [x] 메인 클라이언트: `apps/client/` (port 5174)
+- [x] Zustand 스토어: `useWebSocketStore`, `useThemeStore`, `useSoundStore`
+
+#### Phase 2: 서버 사이드 에이전트 상태 관리
+- [x] `agentStates` Map 구현 (`apps/server/src/index.ts`)
+- [x] `updateAgentState()` — 이벤트 → 상태 전환 로직
+- [x] `broadcastAgentStates()` — WebSocket 브로드캐스트
+- [x] isSubagent 판별 로직 (첫 이벤트가 UserPromptSubmit/SessionStart → 메인 에이전트)
+  - 오래된 세션 재접속 시 DB 조회로 isSubagent 보정
+- [x] 캐릭터 배정 DB 영속화 (재시작 후에도 동일 캐릭터 유지)
+- [x] 타임아웃 체크: WAITING(60초), OFFLINE(5분)
+
+#### Phase 3: 스프라이트 시스템
+- [x] `SpriteCanvas.tsx` — Canvas 기반 픽셀아트 fallback (char_a ~ char_e)
+- [x] GIF 캐릭터 지원: frieren, fern, stark, himmel
+  - `apps/client/public/sprites/{charId}/`
+  - 파일 컨벤션: `{CHARNAME_UPPER}_{STATUS}.gif`
+  - 상태 매핑:
+    | 앱 상태 | GIF 파일 |
+    |---------|---------|
+    | WORKING / ORCHESTRATING | FORCE |
+    | THINKING | THINK |
+    | READING | READING |
+    | WAITING / BLOCKED | REST |
+    | DONE | FINISH |
+    | ERROR / OFFLINE | OFFLINE |
+
+#### Phase 4: 에이전트 대시보드 UI
+- [x] `AgentDashboard/` — 메인 대시보드 컴포넌트
+- [x] 에이전트 카드: 캐릭터 + 상태 + 마지막 이벤트 + 프롬프트
+- [x] 카드 진입/퇴장 애니메이션 강화
+- [x] 뷰 모드 토글: 상세 보기 / 카드 보기
+- [x] 에이전트 컬럼 피드 (마지막 N개 이벤트)
+- [x] FeedTooltip (호버 시 상세 내용)
+- [x] PromptTooltip (프롬프트 호버 상세)
+
+#### Phase 5: 이벤트 탭 (EventTimeline)
+- [x] 이벤트 타임라인 테이블
+- [x] 실시간 LivePulseChart (에이전트별 활동 스파크라인)
+- [x] 필터 패널 (에이전트 / 이벤트 타입 필터)
+- [x] 스틱-투-바텀 스크롤 + "New Events" 버튼
+- [x] CSS 변수 기반 테마 시스템 (`var(--theme-*)`)
+
+#### Phase 6: HITL (Human-In-The-Loop) 오버레이
+- [x] `HitlOverlay.tsx` — createPortal로 body에 마운트
+- [x] PermissionRequest 카드: allow / deny 버튼
+- [x] Question 카드: 텍스트 입력 + submit
+- [x] Countdown 타이머 (urgent 3초 이하 블링크)
+- [x] `hitl.css` — 슬라이드인 애니메이션, 퍼플 글로우 효과
+
+#### Phase 7: 채팅 트랜스크립트 모달
+- [x] `ChatTranscriptModal.tsx` — createPortal, 에이전트 전체 대화 조회
+- [x] forwardRef + nodeRef 패턴 (React 19 findDOMNode 제거 대응)
+
+#### Phase 8: 다크/라이트 모드 토글 (2026-02-28)
+- [x] 헤더에 Sun/Moon 토글 버튼 추가 (`App.tsx`)
+- [x] `isDarkMode: boolean` — `useThemeStore`에 독립 상태로 추가
+- [x] `toggleDarkMode()` 구현:
+  - 다크: 모든 `theme-*` 클래스 제거 → `:root` Console Dark 기본값 사용
+  - 라이트: `theme-light` 클래스만 추가
+- [x] localStorage 영속화 (`'light'` 저장 / 다크 시 키 제거)
+- [x] `initializeTheme()` 수정: `'light'` 저장값 복원 처리
+- [x] "Paper Forest" 라이트 팔레트 CSS 작성:
+  - `App.css` — 헤더, 탭, 버튼 라이트 오버라이드
+  - `agent-dashboard.css` — 에이전트 카드, 피드, 컬럼 라이트 오버라이드
+  - `themes.css` — `.theme-light { --theme-*: ... }` CSS 변수 블록 (이벤트 탭 자동 대응)
+  - `hitl.css` — HITL 카드 라이트 오버라이드
+
+---
+
+## 아키텍처
+
+```
+Claude Code 인스턴스들
+    ↓ (훅 이벤트 HTTP POST, Python)
+Bun 서버 (port 4000)
+    ├── SQLite: 이벤트 저장, 캐릭터 배정 영속화
+    ├── agentStates Map: 에이전트 상태 관리
+    └── WebSocket (/stream): 상태 변경 브로드캐스트
+         ↓
+React 19 대시보드 (port 5174)  ← apps/client/
+    ├── 파티 탭 (AgentDashboard)
+    │   ├── 에이전트 컬럼 (SpriteCanvas + 피드)
+    │   └── 뷰 모드: 상세 / 카드
+    ├── 이벤트 탭 (EventTimeline)
+    │   ├── LivePulseChart
+    │   ├── 이벤트 테이블 (필터 지원)
+    │   └── CSS 변수 테마 자동 대응
+    ├── HitlOverlay (portal → body)
+    └── ChatTranscriptModal (portal → body)
+```
 
 ---
 
@@ -34,318 +130,87 @@ Claude Code 에이전트(터미널 인스턴스)별로 고유한 도트 캐릭�
 
 ### 상태 → 훅 이벤트 매핑
 
-| 상태 | 트리거 이벤트 | 캐릭터 애니메이션 |
-|------|-------------|----------------|
-| **WORKING** | `PreToolUse`, `PostToolUse` | 타이핑 / 망치질 / 분주한 움직임 |
-| **THINKING** | `UserPromptSubmit` | 턱 괴고 생각하는 포즈 |
-| **WAITING** | `Notification` (idle_prompt) | 팔짱 끼고 기다리는 포즈 |
-| **DONE** | `Stop` | 기지개 / 의자에 기대는 포즈 |
-| **ERROR** | `PostToolUseFailure` | 당황한 표정 |
-| **BLOCKED** | `PermissionRequest` | 손들고 멈추는 포즈 |
-| **OFFLINE** | SessionEnd 후 타임아웃 | 잠자는 포즈 |
+| 상태 | 트리거 이벤트 | GIF 파일 |
+|------|-------------|---------|
+| WORKING | PreToolUse, PostToolUse | FORCE |
+| ORCHESTRATING | (서브에이전트 관리 중) | FORCE |
+| THINKING | UserPromptSubmit | THINK |
+| READING | Read 도구 사용 중 | READING |
+| WAITING | Notification (idle) | REST |
+| BLOCKED | PermissionRequest | REST |
+| DONE | Stop | FINISH |
+| ERROR | PostToolUseFailure | OFFLINE |
+| OFFLINE | SessionEnd 후 타임아웃 5분 | OFFLINE |
 
-### 상태 전환 규칙
-
-- 마지막 이벤트 기준으로 상태 결정
-- 이벤트 없이 60초 경과 시 → WAITING
-- 이벤트 없이 5분 경과 시 → OFFLINE
-
----
-
-## 스프라이트 제작
-
-### 도구 추천: PixelLab (pixellab.ai)
-
-- 텍스트 프롬프트로 캐릭터 생성
-- 동일 캐릭터 기반으로 애니메이션 프레임 일관성 유지
-- 스프라이트 시트(PNG) 직접 export
-
-### 필요한 스프라이트 시트 구성
-
-```
-character_A/
-├── idle.png       # 4~6 프레임, 가만히 있는 상태
-├── working.png    # 6~8 프레임, 일하는 상태
-├── thinking.png   # 4 프레임, 생각하는 상태
-├── waiting.png    # 4 프레임, 기다리는 상태
-├── done.png       # 4 프레임, 완료 상태
-├── error.png      # 4 프레임, 에러 상태
-└── sleeping.png   # 4 프레임, 오프라인 상태
-```
-
-### 스프라이트 시트 스펙
-
-- 해상도: 프레임당 32x32 또는 48x48 픽셀
-- 포맷: PNG (투명 배경)
-- 레이아웃: 가로로 프레임 나열 (horizontal strip)
-- 색상: 팔레트 16색 이내 권장 (레트로 느낌)
-
-### PixelLab 프롬프트 예시
-
-```
-pixel art character, office worker, side view, 
-32x32, idle animation, 6 frames horizontal sprite sheet,
-transparent background, retro 16-bit style
-```
-
-### 캐릭터 수
-
-- 에이전트(터미널/프로젝트)당 1캐릭터
-- 최소 3~5종 미리 제작 (자동 순환 할당)
+### 에이전트 키 형식
+`source_app:session_id(8자)` — CLAUDE.md 규칙
 
 ---
 
-## 기술 구현
+## 테마 시스템 설계 원칙
 
-### 전체 아키텍처
+### 모드 vs 테마
+
+- **모드** (`isDarkMode`): 전역 다크/라이트 토글. 테마와 독립적.
+- **테마** (`currentTheme`): 시각적 정체성 (Console Dark, Ocean 등). 향후 커스텀 테마 등록 지원.
+
+### 다크 모드 동작 방식
 
 ```
-Claude Code 인스턴스들
-    ↓ (훅 이벤트 HTTP POST)
-Bun 서버 (port 4000)
-    ├── SQLite: 이벤트 저장
-    ├── 에이전트 상태 관리 (in-memory Map)
-    └── WebSocket: 상태 변경 브로드캐스트
-         ↓
-Vue 3 대시보드 (port 5173)
-    └── 에이전트 카드 그리드
-         └── 스프라이트 Canvas 컴포넌트
+다크 모드:  HTML에 theme-* 클래스 없음 → :root CSS 변수 (Console Dark 기본값)
+라이트 모드: HTML에 theme-light 클래스 → .theme-light {} 오버라이드 적용
 ```
 
-### Phase 1: 베이스 프로젝트 세팅
+> ⚠️ `setTheme('dark')`를 호출하면 `.theme-dark` (Tailwind 블루-그레이)가 적용됨.
+> 다크 모드 전환 시에는 절대 `setTheme('dark')` 호출 금지 — `toggleDarkMode()`만 사용.
 
-```bash
-git clone https://github.com/disler/claude-code-hooks-multi-agent-observability
-cd claude-code-hooks-multi-agent-observability
+### 향후 테마 등록 형식 (tasks/theme-management.md)
 
-# 의존성 설치
-just install   # 또는 bun install
-
-# 글로벌 훅 설정
-# ~/.claude/settings.json 수정
-# --source-app $(basename $CLAUDE_PROJECT_DIR) 로 동적 프로젝트명 적용
-```
-
-**글로벌 `~/.claude/settings.json` 핵심 설정:**
+각 테마 패키지는 `lightColors`와 `darkColors` 두 세트 모두 필수:
 
 ```json
 {
-  "hooks": {
-    "PreToolUse": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "uv run ~/claude-observability/.claude/hooks/send_event.py --source-app $(basename $CLAUDE_PROJECT_DIR) --event-type PreToolUse"
-      }]
-    }]
-  }
+  "name": "Ocean",
+  "lightColors": { "--theme-primary": "#0070b0", ... },
+  "darkColors":  { "--theme-primary": "#40a8e0", ... }
 }
-```
-
-> ⚠️ `$(basename $CLAUDE_PROJECT_DIR)` 동작 여부는 실제 테스트 필요
-
-### Phase 2: 서버 사이드 상태 관리 추가
-
-기존 `apps/server/src/index.ts`에 에이전트 상태 추적 로직 추가:
-
-```typescript
-// 에이전트별 현재 상태 관리
-const agentStates = new Map<string, {
-  status: 'WORKING' | 'THINKING' | 'WAITING' | 'DONE' | 'ERROR' | 'BLOCKED' | 'OFFLINE',
-  lastEvent: string,
-  lastUpdated: Date,
-  characterId: string  // 어떤 캐릭터를 쓸지
-}>()
-
-// 이벤트 수신 시 상태 업데이트
-function updateAgentState(sourceApp: string, eventType: string) {
-  const status = eventToStatus(eventType)
-  agentStates.set(sourceApp, {
-    status,
-    lastEvent: eventType,
-    lastUpdated: new Date(),
-    characterId: getOrAssignCharacter(sourceApp)
-  })
-  
-  // WebSocket으로 전체 상태 브로드캐스트
-  broadcastAgentStates()
-}
-
-// 타임아웃 체크 (60초 → WAITING, 5분 → OFFLINE)
-setInterval(checkTimeouts, 10000)
-```
-
-**상태 전환 함수:**
-
-```typescript
-function eventToStatus(eventType: string): AgentStatus {
-  const map = {
-    'PreToolUse': 'WORKING',
-    'PostToolUse': 'WORKING',
-    'UserPromptSubmit': 'THINKING',
-    'Stop': 'DONE',
-    'PostToolUseFailure': 'ERROR',
-    'PermissionRequest': 'BLOCKED',
-    'Notification': 'WAITING',
-    'SessionEnd': 'OFFLINE'
-  }
-  return map[eventType] ?? 'WAITING'
-}
-```
-
-**WebSocket 메시지 포맷 추가:**
-
-```typescript
-// 기존 이벤트 스트림과 별도로 에이전트 상태 전용 채널
-ws.send(JSON.stringify({
-  type: 'agent_states',
-  data: Object.fromEntries(agentStates)
-}))
-```
-
-### Phase 3: 스프라이트 렌더링 컴포넌트
-
-`apps/client/src/components/SpriteCanvas.vue`:
-
-```vue
-<template>
-  <canvas ref="canvas" :width="spriteSize" :height="spriteSize" />
-</template>
-
-<script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-
-const props = defineProps<{
-  characterId: string  // 'character_A', 'character_B' 등
-  status: string       // 'WORKING', 'IDLE' 등
-  spriteSize: number   // 표시 크기 (px)
-}>()
-
-const canvas = ref<HTMLCanvasElement>()
-const frameSize = 32      // 스프라이트 한 프레임 크기
-const fps = 8             // 애니메이션 속도
-let currentFrame = 0
-let animTimer: number
-
-// 상태별 스프라이트 시트 로드
-const spriteCache = new Map<string, HTMLImageElement>()
-
-async function loadSprite(characterId: string, status: string) {
-  const key = `${characterId}_${status}`
-  if (spriteCache.has(key)) return spriteCache.get(key)!
-  
-  const img = new Image()
-  img.src = `/sprites/${characterId}/${status.toLowerCase()}.png`
-  await img.decode()
-  spriteCache.set(key, img)
-  return img
-}
-
-// 애니메이션 루프
-async function animate() {
-  const img = await loadSprite(props.characterId, props.status)
-  const totalFrames = img.width / frameSize
-  const ctx = canvas.value!.getContext('2d')!
-  
-  ctx.clearRect(0, 0, props.spriteSize, props.spriteSize)
-  ctx.imageSmoothingEnabled = false  // 픽셀아트 선명하게
-  ctx.drawImage(
-    img,
-    currentFrame * frameSize, 0,  // 소스 위치
-    frameSize, frameSize,          // 소스 크기
-    0, 0,                          // 대상 위치
-    props.spriteSize, props.spriteSize  // 대상 크기 (확대)
-  )
-  
-  currentFrame = (currentFrame + 1) % totalFrames
-  animTimer = setTimeout(animate, 1000 / fps)
-}
-
-onMounted(() => animate())
-onUnmounted(() => clearTimeout(animTimer))
-watch(() => [props.characterId, props.status], () => {
-  currentFrame = 0  // 상태 바뀌면 첫 프레임부터
-})
-</script>
-```
-
-### Phase 4: 대시보드 메인 화면
-
-`apps/client/src/components/AgentDashboard.vue`:
-
-```vue
-<template>
-  <div class="dashboard">
-    <h1>🎮 Agent Dashboard</h1>
-    <div class="agent-grid">
-      <div 
-        v-for="(agent, name) in agentStates" 
-        :key="name"
-        class="agent-card"
-        :class="agent.status.toLowerCase()"
-      >
-        <SpriteCanvas 
-          :characterId="agent.characterId"
-          :status="agent.status"
-          :spriteSize="96"
-        />
-        <div class="agent-info">
-          <div class="agent-name">{{ name }}</div>
-          <div class="agent-status">{{ statusLabel[agent.status] }}</div>
-          <div class="last-event">{{ agent.lastEvent }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 ```
 
 ---
 
-## 작업 순서 (추천)
+## 알려진 이슈 / 미완성 항목
 
-### Step 1: 환경 세팅 (0.5일)
+### ChatTranscriptModal 라이트 모드
+- `ChatTranscriptModal.tsx`가 Tailwind `dark:` 변형 사용 (`dark:bg-gray-900` 등)
+- 우리 시스템은 `.dark` 클래스를 추가하지 않으므로 `dark:` 변형이 **절대 활성화되지 않음**
+- 라이트 모드에서 모달 내부 색상이 올바르지 않음
+- 수정 방향: CSS 변수 기반 오버라이드 또는 인라인 스타일 교체 필요
 
-- [ ] 베이스 프로젝트 클론 및 실행 확인
-- [ ] 글로벌 훅 설정 및 `$(basename $CLAUDE_PROJECT_DIR)` 동작 테스트
-- [ ] 여러 터미널에서 이벤트가 대시보드에 잡히는지 확인
-
-### Step 2: 스프라이트 제작 (1~2일)
-
-- [ ] PixelLab에서 캐릭터 3~5종 생성
-- [ ] 각 캐릭터별 상태 애니메이션 스프라이트 시트 제작
-  - idle, working, thinking, waiting, done, error, sleeping
-- [ ] `/apps/client/public/sprites/` 폴더에 배치
-
-### Step 3: 서버 수정 (0.5일)
-
-- [ ] 에이전트 상태 Map 추가
-- [ ] 이벤트 수신 시 상태 업데이트 로직
-- [ ] 타임아웃 체크 (WAITING / OFFLINE 전환)
-- [ ] 에이전트 상태 전용 WebSocket 메시지 추가
-
-### Step 4: 프론트 구현 (1일)
-
-- [ ] `SpriteCanvas.vue` 컴포넌트 구현
-- [ ] `AgentDashboard.vue` 메인 화면 구현
-- [ ] WebSocket에서 에이전트 상태 수신 및 실시간 반영
-- [ ] 기존 이벤트 타임라인과 탭으로 병행 (선택)
-
-### Step 5: 스타일링 및 마무리 (0.5일)
-
-- [ ] 상태별 카드 배경색/효과
-- [ ] 캐릭터 이름/상태 표시 UI
-- [ ] 반응형 그리드 레이아웃
+### ThemePreview 하드코딩 색상
+- `ThemePreview.tsx`가 하드코딩된 색상 사용
+- 현재 `ThemeManager`가 App.tsx에 연결되지 않아 데드 코드 상태
+- 우선순위 낮음
 
 ---
 
-## 리스크 및 대응
+## 핵심 파일 경로
 
-| 리스크 | 가능성 | 대응 |
-|--------|--------|------|
-| `$(basename $CLAUDE_PROJECT_DIR)` 동작 안 함 | 중간 | 환경변수 대신 Python 스크립트에서 `os.getcwd()` 로 처리 |
-| PixelLab 캐릭터 상태 간 일관성 부족 | 높음 | 레퍼런스 이미지 업로드 기능 활용, 같은 세션에서 연속 생성 |
-| 스프라이트 시트 프레임 수 불일치 | 낮음 | 서버에서 캐릭터별 메타데이터(프레임 수) JSON으로 관리 |
+| 역할 | 경로 |
+|------|------|
+| 서버 엔트리 | `apps/server/src/index.ts` |
+| 클라이언트 엔트리 | `apps/client/src/App.tsx` |
+| 클라이언트 메인 CSS | `apps/client/src/App.css` |
+| 에이전트 대시보드 | `apps/client/src/components/AgentDashboard/` |
+| 스프라이트 렌더러 | `apps/client/src/components/SpriteCanvas.tsx` |
+| Zustand 스토어 | `apps/client/src/stores/` |
+| 테마 스토어 | `apps/client/src/stores/useThemeStore.ts` |
+| 테마 타입 | `apps/client/src/types/theme.ts` |
+| React 훅 | `apps/client/src/hooks/` |
+| CSS (대시보드) | `apps/client/src/styles/agent-dashboard.css` |
+| CSS (테마 변수) | `apps/client/src/styles/themes.css` |
+| CSS (HITL) | `apps/client/src/styles/hitl.css` |
+| 훅 스크립트 | `.claude/hooks/send_event.py` |
+| GIF 스프라이트 | `apps/client/public/sprites/{charId}/` |
 
 ---
 
@@ -354,4 +219,3 @@ watch(() => [props.characterId, props.status], () => {
 - [claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability)
 - [Claude Code Hooks 공식 문서](https://code.claude.com/docs/en/hooks)
 - [PixelLab AI](https://www.pixellab.ai/)
-- [Canvas 픽셀아트 렌더링 (MDN)](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)

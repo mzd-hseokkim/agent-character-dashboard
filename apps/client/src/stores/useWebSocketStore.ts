@@ -4,6 +4,20 @@ import type { HookEvent, WebSocketMessage } from '../types/index';
 
 export type AgentStatus = 'WORKING' | 'THINKING' | 'WAITING' | 'DONE' | 'ERROR' | 'BLOCKED' | 'OFFLINE' | 'ORCHESTRATING' | 'READING';
 
+export interface CharacterEntry {
+  id: string;
+  characterId: string;
+  displayName: string;
+  spritePrefix: string;
+  sprites: Record<string, string>; // status → URL
+}
+
+export interface ActiveTheme {
+  id: string;
+  lightColors: Record<string, string>;
+  darkColors: Record<string, string>;
+}
+
 export interface AgentState {
   status: AgentStatus;
   lastEvent: string;
@@ -19,12 +33,18 @@ interface WebSocketStore {
   agentStates: Record<string, AgentState>;
   isConnected: boolean;
   error: string | null;
+  characters: CharacterEntry[];
+  charactersVersion: number;
+  activeTheme: ActiveTheme | null;
   clearEvents: () => void;
   _setConnected: (v: boolean) => void;
   _setError: (v: string | null) => void;
   _setEvents: (events: HookEvent[]) => void;
   _pushEvent: (event: HookEvent) => void;
   _setAgentStates: (states: Record<string, AgentState>) => void;
+  _setCharacters: (chars: CharacterEntry[]) => void;
+  _bumpCharactersVersion: () => void;
+  _setActiveTheme: (theme: ActiveTheme | null) => void;
 }
 
 const MAX_EVENTS = parseInt(import.meta.env.VITE_MAX_EVENTS_TO_DISPLAY || '300');
@@ -34,6 +54,9 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   agentStates: {},
   isConnected: false,
   error: null,
+  characters: [],
+  charactersVersion: 0,
+  activeTheme: null,
 
   clearEvents: () => set({ events: [] }),
 
@@ -41,6 +64,9 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   _setError: (v) => set({ error: v }),
   _setEvents: (events) => set({ events }),
   _setAgentStates: (states) => set({ agentStates: states }),
+  _setCharacters: (chars) => set({ characters: chars }),
+  _bumpCharactersVersion: () => set(s => ({ charactersVersion: s.charactersVersion + 1 })),
+  _setActiveTheme: (theme) => set({ activeTheme: theme }),
 
   _pushEvent: (newEvent) => {
     const { events } = get();
@@ -96,6 +122,11 @@ export function useWebSocketConnection(url: string) {
               s._pushEvent(message.data as HookEvent);
             } else if (message.type === 'agent_states') {
               s._setAgentStates(message.data as unknown as Record<string, AgentState>);
+            } else if (message.type === 'characters_updated') {
+              s._bumpCharactersVersion();
+            } else if (message.type === 'theme_activated') {
+              const d = message.data as unknown as ActiveTheme;
+              s._setActiveTheme({ id: d.id, lightColors: d.lightColors, darkColors: d.darkColors });
             }
           } catch (err) {
             console.error('Failed to parse WebSocket message:', err);

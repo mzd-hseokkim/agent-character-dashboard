@@ -1,10 +1,11 @@
-import { 
-  insertTheme, 
-  updateTheme, 
-  getTheme, 
-  getThemes, 
-  deleteTheme, 
-  incrementThemeDownloadCount 
+import { rm } from 'node:fs/promises';
+import {
+  insertTheme,
+  updateTheme,
+  getTheme,
+  getThemes,
+  deleteTheme,
+  incrementThemeDownloadCount
 } from './db';
 import type { Theme, ThemeSearchQuery, ThemeValidationError, ApiResponse } from './types';
 
@@ -312,14 +313,17 @@ export async function deleteThemeById(id: string, authorId?: string): Promise<Ap
     }
     
     const success = deleteTheme(id);
-    
+
     if (!success) {
       return {
         success: false,
         error: 'Failed to delete theme'
       };
     }
-    
+
+    // 스프라이트 파일도 삭제 (DB 캐스케이드와 병행)
+    await rm(`./uploads/sprites/${id}`, { recursive: true, force: true });
+
     return {
       success: true,
       message: 'Theme deleted successfully'

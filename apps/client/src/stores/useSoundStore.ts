@@ -34,7 +34,7 @@ function osc(
   o.stop(end);
 }
 
-export type SoundEvent = 'agent_appear' | 'done' | 'error' | 'blocked' | 'work_start' | 'session_end' | 'session_start' | 'reentry';
+export type SoundEvent = 'agent_appear' | 'done' | 'error' | 'blocked' | 'work_start' | 'session_end' | 'session_start' | 'reentry' | 'log_tick';
 
 const SOUNDS: Record<SoundEvent, (ac: AudioContext) => void> = {
   // 에이전트 등장: 상승하는 두 음
@@ -87,6 +87,12 @@ const SOUNDS: Record<SoundEvent, (ac: AudioContext) => void> = {
   work_start(ac) {
     const t = ac.currentTime;
     osc(ac, 'square', 330, 0.09, t, t + 0.06, 495);
+  },
+
+  // 로그 틱: 아주 짧고 조용한 클릭감
+  log_tick(ac) {
+    const t = ac.currentTime;
+    osc(ac, 'square', 880, 0.04, t, t + 0.03);
   },
 
   // 세션 시작: 파워온 부트업

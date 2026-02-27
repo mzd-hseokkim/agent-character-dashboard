@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import type { HookEvent, FilterOptions, Theme, ThemeSearchQuery } from './types';
+import type { HookEvent, FilterOptions, Theme, ThemeSearchQuery, ThemeCharacter, CharacterSprite } from './types';
 
 let db: Database;
 
@@ -128,6 +128,50 @@ export function initDatabase(): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_themes_createdAt ON themes(createdAt)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_theme_shares_token ON theme_shares(shareToken)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_theme_ratings_theme ON theme_ratings(themeId)');
+
+  // Phase 1: themes 테이블 마이그레이션 - light_colors / dark_colors 컬럼 추가
+  const themeColumns = db.prepare("PRAGMA table_info(themes)").all() as any[];
+  if (!themeColumns.some((c: any) => c.name === 'light_colors')) {
+    db.exec('ALTER TABLE themes ADD COLUMN light_colors TEXT');
+    // 기존 colors → light_colors로 복사
+    db.exec('UPDATE themes SET light_colors = colors WHERE light_colors IS NULL');
+  }
+  if (!themeColumns.some((c: any) => c.name === 'dark_colors')) {
+    db.exec('ALTER TABLE themes ADD COLUMN dark_colors TEXT');
+  }
+
+  // Phase 1: 테마 캐릭터 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS theme_characters (
+      id TEXT PRIMARY KEY,
+      themeId TEXT NOT NULL,
+      characterId TEXT NOT NULL,
+      displayName TEXT NOT NULL,
+      spritePrefix TEXT NOT NULL,
+      sortOrder INTEGER DEFAULT 0,
+      createdAt INTEGER NOT NULL,
+      UNIQUE(themeId, characterId),
+      FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Phase 1: 캐릭터별 스프라이트 파일 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS character_sprites (
+      id TEXT PRIMARY KEY,
+      characterId TEXT NOT NULL,
+      status TEXT NOT NULL,
+      filePath TEXT NOT NULL,
+      fileSize INTEGER NOT NULL,
+      mimeType TEXT DEFAULT 'image/gif',
+      createdAt INTEGER NOT NULL,
+      UNIQUE(characterId, status),
+      FOREIGN KEY (characterId) REFERENCES theme_characters(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_theme_characters_themeId ON theme_characters(themeId)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_character_sprites_characterId ON character_sprites(characterId)');
 }
 
 export function insertEvent(event: HookEvent): HookEvent {
@@ -205,16 +249,20 @@ export function getRecentEvents(limit: number = 300): HookEvent[] {
 // Theme database functions
 export function insertTheme(theme: Theme): Theme {
   const stmt = db.prepare(`
-    INSERT INTO themes (id, name, displayName, description, colors, isPublic, authorId, authorName, createdAt, updatedAt, tags, downloadCount, rating, ratingCount)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO themes (id, name, displayName, description, colors, light_colors, dark_colors, isPublic, authorId, authorName, createdAt, updatedAt, tags, downloadCount, rating, ratingCount)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  
+
+  const colorsJson = JSON.stringify(theme.lightColors ?? theme.colors);
+
   stmt.run(
     theme.id,
     theme.name,
     theme.displayName,
     theme.description || null,
     JSON.stringify(theme.colors),
+    colorsJson,
+    theme.darkColors ? JSON.stringify(theme.darkColors) : null,
     theme.isPublic ? 1 : 0,
     theme.authorId || null,
     theme.authorName || null,
@@ -225,7 +273,7 @@ export function insertTheme(theme: Theme): Theme {
     theme.rating || 0,
     theme.ratingCount || 0
   );
-  
+
   return theme;
 }
 
@@ -259,15 +307,17 @@ export function updateTheme(id: string, updates: Partial<Theme>): boolean {
 export function getTheme(id: string): Theme | null {
   const stmt = db.prepare('SELECT * FROM themes WHERE id = ?');
   const row = stmt.get(id) as any;
-  
+
   if (!row) return null;
-  
+
   return {
     id: row.id,
     name: row.name,
     displayName: row.displayName,
     description: row.description,
     colors: JSON.parse(row.colors),
+    lightColors: row.light_colors ? JSON.parse(row.light_colors) : undefined,
+    darkColors: row.dark_colors ? JSON.parse(row.dark_colors) : undefined,
     isPublic: Boolean(row.isPublic),
     authorId: row.authorId,
     authorName: row.authorName,
@@ -333,6 +383,8 @@ export function getThemes(query: ThemeSearchQuery = {}): Theme[] {
     displayName: row.displayName,
     description: row.description,
     colors: JSON.parse(row.colors),
+    lightColors: row.light_colors ? JSON.parse(row.light_colors) : undefined,
+    darkColors: row.dark_colors ? JSON.parse(row.dark_colors) : undefined,
     isPublic: Boolean(row.isPublic),
     authorId: row.authorId,
     authorName: row.authorName,
@@ -412,6 +464,74 @@ export function updateEventHITLResponse(id: number, response: any): HookEvent | 
     humanInTheLoop: row.humanInTheLoop ? JSON.parse(row.humanInTheLoop) : undefined,
     humanInTheLoopStatus: row.humanInTheLoopStatus ? JSON.parse(row.humanInTheLoopStatus) : undefined,
     model_name: row.model_name || undefined
+  };
+}
+
+// Phase 1: ThemeCharacter CRUD
+export function insertThemeCharacter(char: ThemeCharacter): ThemeCharacter {
+  db.prepare(`
+    INSERT INTO theme_characters (id, themeId, characterId, displayName, spritePrefix, sortOrder, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(char.id, char.themeId, char.characterId, char.displayName, char.spritePrefix, char.sortOrder, char.createdAt);
+  return char;
+}
+
+export function getThemeCharacters(themeId: string): ThemeCharacter[] {
+  return (db.prepare(`
+    SELECT * FROM theme_characters WHERE themeId = ? ORDER BY sortOrder ASC, createdAt ASC
+  `).all(themeId) as any[]).map(rowToThemeCharacter);
+}
+
+export function getAllCharacters(): ThemeCharacter[] {
+  return (db.prepare(`
+    SELECT * FROM theme_characters ORDER BY themeId, sortOrder ASC
+  `).all() as any[]).map(rowToThemeCharacter);
+}
+
+export function deleteThemeCharacter(id: string): boolean {
+  return db.prepare('DELETE FROM theme_characters WHERE id = ?').run(id).changes > 0;
+}
+
+function rowToThemeCharacter(row: any): ThemeCharacter {
+  return {
+    id: row.id,
+    themeId: row.themeId,
+    characterId: row.characterId,
+    displayName: row.displayName,
+    spritePrefix: row.spritePrefix,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+  };
+}
+
+// Phase 1: CharacterSprite CRUD
+export function insertCharacterSprite(sprite: CharacterSprite): CharacterSprite {
+  db.prepare(`
+    INSERT INTO character_sprites (id, characterId, status, filePath, fileSize, mimeType, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(sprite.id, sprite.characterId, sprite.status, sprite.filePath, sprite.fileSize, sprite.mimeType, sprite.createdAt);
+  return sprite;
+}
+
+export function getCharacterSprites(characterId: string): CharacterSprite[] {
+  return (db.prepare(`
+    SELECT * FROM character_sprites WHERE characterId = ? ORDER BY status ASC
+  `).all(characterId) as any[]).map(rowToCharacterSprite);
+}
+
+export function deleteCharacterSprites(characterId: string): boolean {
+  return db.prepare('DELETE FROM character_sprites WHERE characterId = ?').run(characterId).changes > 0;
+}
+
+function rowToCharacterSprite(row: any): CharacterSprite {
+  return {
+    id: row.id,
+    characterId: row.characterId,
+    status: row.status,
+    filePath: row.filePath,
+    fileSize: row.fileSize,
+    mimeType: row.mimeType || 'image/gif',
+    createdAt: row.createdAt,
   };
 }
 

@@ -16,9 +16,10 @@
 }
 .header-title {
   font-size: 14px; font-weight: 600; letter-spacing: 0.05em;
-  color: #8aa888;
+  color: #8aa888; white-space: nowrap;
 }
 .tab-group { display: flex; gap: 3px; }
+@media (max-width: 699px) { .header-tabs { display: none; } }
 .tab-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 12px; border-radius: 6px;
@@ -45,6 +46,8 @@
 }
 .header-btn:hover { color: #8aa888; background: #141e14; border-color: #2a3828; }
 .header-btn-muted { color: #2a3028; }
+.header-sep { width: 1px; height: 16px; background: #1c2820; flex-shrink: 0; }
+
 
 /* ── Tab pane ─────────────────────────────────────── */
 .tab-pane {
@@ -64,3 +67,34 @@
 }
 .tab-switch-exit         { opacity: 1; }
 .tab-switch-exit-active  { opacity: 0; transition: opacity 0.12s ease; }
+
+/* ── App root background ─────────────────────────── */
+.app-root { background: #0d1117; }
+
+/* ══ Light mode overrides (Header / Nav) ════════════ */
+/*
+  Light mode palette — "Paper Forest"
+  bg:     #eef2ea / #e4ebe0 / #dce4d6
+  border: #c2d0bc / #b4c4ae
+  text:   #1c2c18 / #2e4228 / #4a6040 / #7a9070 / #9aaa90
+*/
+.theme-light .app-root           { background: #eef2ea; }
+.theme-light .frieren-header     { background: #e4ebe0; border-bottom-color: #c2d0bc; }
+.theme-light .header-accent-bar  { background: linear-gradient(to bottom, #3a8020, #5a9830); }
+.theme-light .header-title       { color: #2e4228; }
+
+.theme-light .tab-btn            { color: #7a9070; background: transparent; border-color: transparent; }
+.theme-light .tab-active         { background: #d4e0ce; color: #2e4228; border-color: #b4c4ae; }
+.theme-light .tab-inactive:hover { color: #4a6040; background: #dce8d6; }
+
+.theme-light .header-count       { color: #4a6040; background: #dce8d6; border-color: #c2d0bc; }
+
+.theme-light .header-btn         { color: #7a9070; border-color: #c2d0bc; background: transparent; }
+.theme-light .header-btn:hover   { color: #2e4228; background: #d4e0ce; border-color: #b4c4ae; }
+.theme-light .header-btn-muted   { color: #b4c4ae; }
+.theme-light .header-sep         { background: #c2d0bc; }
+
+.theme-light .view-mode-toggle   { background: #e4ebe0; border-color: #c2d0bc; }
+.theme-light .view-mode-btn      { color: #7a9070; }
+.theme-light .view-mode-btn:hover{ color: #4a6040; background: #dce8d6; }
+.theme-light .view-mode-btn.active{ background: #d0deca; color: #2e4228; }

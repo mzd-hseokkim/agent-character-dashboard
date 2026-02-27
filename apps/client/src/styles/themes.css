@@ -45,6 +45,47 @@
   --theme-transition-fast: all 0.1s ease-in-out;
 }
 
+/* Light theme — "Paper Forest" */
+.theme-light {
+  /* Primary colors — forest green */
+  --theme-primary: #3a8020;
+  --theme-primary-hover: #2a6010;
+  --theme-primary-light: #d4e8c8;
+  --theme-primary-dark: #1e5010;
+
+  /* Background colors — light sage */
+  --theme-bg-primary: #eef2ea;
+  --theme-bg-secondary: #e4ebe0;
+  --theme-bg-tertiary: #dce4d6;
+  --theme-bg-quaternary: #c8d8be;
+
+  /* Text colors — dark forest */
+  --theme-text-primary: #1c2c18;
+  --theme-text-secondary: #2e4228;
+  --theme-text-tertiary: #4a6040;
+  --theme-text-quaternary: #7a9070;
+
+  /* Border colors — sage */
+  --theme-border-primary: #6a8f60;
+  --theme-border-secondary: #567848;
+  --theme-border-tertiary: #3f5e38;
+
+  /* Accent colors */
+  --theme-accent-success: #3a8020;
+  --theme-accent-warning: #a07020;
+  --theme-accent-error: #a03020;
+  --theme-accent-info: #3878a0;
+
+  /* Shadow colors */
+  --theme-shadow: rgba(30, 50, 25, 0.12);
+  --theme-shadow-lg: rgba(30, 50, 25, 0.25);
+
+  /* Interactive states */
+  --theme-hover-bg: rgba(58, 128, 32, 0.06);
+  --theme-active-bg: rgba(58, 128, 32, 0.12);
+  --theme-focus-ring: #3a8020;
+}
+
 /* Dark theme */
 .theme-dark {
   /* Primary colors */

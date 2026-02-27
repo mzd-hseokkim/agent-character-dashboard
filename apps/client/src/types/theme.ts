@@ -72,6 +72,7 @@ export interface PredefinedTheme {
 
 export interface ThemeState {
   currentTheme: ThemeName | string;
+  isDarkMode: boolean;
   customThemes: CustomTheme[];
   isCustomTheme: boolean;
   isLoading: boolean;

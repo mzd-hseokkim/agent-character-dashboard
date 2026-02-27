@@ -151,3 +151,22 @@
 .hitl-enter-active { transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 .hitl-exit { opacity: 1; }
 .hitl-exit-active { opacity: 0; transform: translateX(24px) scale(0.95); transition: opacity 0.15s ease, transform 0.15s ease; }
+
+/* ── Light mode overrides ── */
+.theme-light .hitl-card {
+  background: #eef2ea; border-color: #c2d0bc;
+  box-shadow: 0 16px 48px rgba(30,50,25,0.14), 0 0 0 1px rgba(90,152,64,0.1);
+}
+.theme-light .hitl-card.permission {
+  border-color: #8060b0;
+  box-shadow: 0 16px 48px rgba(30,50,25,0.14), 0 0 20px rgba(100,56,160,0.2);
+}
+.theme-light .hitl-hdr          { background: #e4ebe0; border-bottom-color: #c2d0bc; }
+.theme-light .hitl-agent        { color: #7a9070; }
+.theme-light .hitl-countdown    { color: #907030; }
+.theme-light .hitl-body         { border-bottom-color: #d0deca; }
+.theme-light .hitl-question     { color: #2e4228; }
+.theme-light .hitl-input {
+  background: #dce4d6; border-color: #c2d0bc; color: #2e4228;
+}
+.theme-light .hitl-input:focus  { border-color: #3a8020; }

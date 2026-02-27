@@ -1,4 +1,4 @@
-import { initDatabase, insertEvent, getFilterOptions, getRecentEvents, getEventById, updateEventHITLResponse, db } from './db';
+import { initDatabase, insertEvent, getFilterOptions, getRecentEvents, getEventById, updateEventHITLResponse, db, getAllCharacters, getThemeCharacters, getCharacterSprites, getTheme } from './db';
 import type { HookEvent, HumanInTheLoopResponse } from './types';
 import {
   createTheme,
@@ -10,12 +10,16 @@ import {
   importTheme,
   getThemeStats
 } from './theme';
+import { handleThemeUpload } from './upload';
 
 // Initialize database
 initDatabase();
 
 // Store WebSocket clients
 const wsClients = new Set<any>();
+
+// Active theme (in-memory)
+let activeThemeId: string | null = null;
 
 // ─── Agent State Management ───────────────────────────────────────────────────
 
@@ -33,8 +37,24 @@ interface AgentState {
 
 const agentStates = new Map<string, AgentState>();
 
-const DEFAULT_CHARACTER_IDS = ['frieren', 'fern', 'stark', 'himmel'];
-const CHARACTER_IDS = ['frieren', 'fern', 'stark', 'himmel', 'char_a', 'char_b', 'char_c', 'char_d', 'char_e'];
+const BUILTIN_DEFAULT_IDS = ['frieren', 'fern', 'stark', 'himmel'];
+const CANVAS_FALLBACK_IDS = ['char_a', 'char_b', 'char_c', 'char_d', 'char_e'];
+
+function loadDefaultCharacterIds(): string[] {
+  try {
+    const dbChars = getAllCharacters();
+    if (dbChars.length > 0) {
+      return [...new Set(dbChars.map(c => c.characterId))];
+    }
+  } catch { /* DB not ready yet */ }
+  return BUILTIN_DEFAULT_IDS;
+}
+
+function loadAllCharacterIds(): string[] {
+  const defaults = loadDefaultCharacterIds();
+  return [...defaults, ...CANVAS_FALLBACK_IDS.filter(id => !defaults.includes(id))];
+}
+
 let characterCounter = 0;
 let taskCounter = 0;
 
@@ -53,7 +73,8 @@ function getOrAssignCharacter(agentKey: string): string {
   if (row) return row.character_id;
 
   // 신규 에이전트: 새 캐릭터 배정 후 DB에 저장
-  const characterId = DEFAULT_CHARACTER_IDS[characterCounter++ % DEFAULT_CHARACTER_IDS.length];
+  const defaultIds = loadDefaultCharacterIds();
+  const characterId = defaultIds[characterCounter++ % defaultIds.length]!
   db.prepare('INSERT INTO agent_characters (agent_key, character_id) VALUES (?, ?)').run(agentKey, characterId);
   return characterId;
 }
@@ -178,6 +199,20 @@ function updateAgentState(sourceApp: string, sessionId: string, eventType: strin
     isSubagent,
   });
   broadcastAgentStates();
+}
+
+function broadcastCharactersUpdated() {
+  const message = JSON.stringify({ type: 'characters_updated' });
+  wsClients.forEach(client => {
+    try { client.send(message); } catch { wsClients.delete(client); }
+  });
+}
+
+function broadcastThemeActivated(themeId: string, lightColors: object, darkColors: object) {
+  const message = JSON.stringify({ type: 'theme_activated', data: { themeId, lightColors, darkColors } });
+  wsClients.forEach(client => {
+    try { client.send(message); } catch { wsClients.delete(client); }
+  });
 }
 
 function broadcastAgentStates() {
@@ -335,7 +370,23 @@ const server = Bun.serve({
     if (req.method === 'OPTIONS') {
       return new Response(null, { headers });
     }
-    
+
+    // Static file serving for uploaded sprites
+    if (url.pathname.startsWith('/uploads/')) {
+      const relPath = url.pathname.slice('/uploads/'.length);
+      const file = Bun.file(`./uploads/${relPath}`);
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400',
+            'Content-Type': 'image/gif',
+          },
+        });
+      }
+      return new Response('Not found', { status: 404 });
+    }
+
     // POST /events - Receive new events
     if (url.pathname === '/events' && req.method === 'POST') {
       try {
@@ -396,9 +447,10 @@ const server = Bun.serve({
             headers: { ...headers, 'Content-Type': 'application/json' }
           });
         }
-        const currentIdx = CHARACTER_IDS.indexOf(state.characterId);
-        const nextIdx = (currentIdx + 1) % CHARACTER_IDS.length;
-        const nextCharId = CHARACTER_IDS[nextIdx];
+        const allIds = loadAllCharacterIds();
+        const currentIdx = allIds.indexOf(state.characterId);
+        const nextIdx = (currentIdx + 1) % allIds.length;
+        const nextCharId = allIds[nextIdx]!
         agentStates.set(agentKey, { ...state, characterId: nextCharId });
         // DB에도 반영하여 재접속 시 수동 변경 사항 유지
         db.prepare('INSERT OR REPLACE INTO agent_characters (agent_key, character_id) VALUES (?, ?)').run(agentKey, nextCharId);
@@ -500,7 +552,98 @@ const server = Bun.serve({
     }
 
     // Theme API endpoints
-    
+
+    // GET /api/active-theme - Current active theme info
+    if (url.pathname === '/api/active-theme' && req.method === 'GET') {
+      if (!activeThemeId) {
+        return new Response(JSON.stringify({ success: true, data: null }), { headers });
+      }
+      const theme = getTheme(activeThemeId);
+      if (!theme) {
+        return new Response(JSON.stringify({ success: true, data: null }), { headers });
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        data: { id: theme.id, lightColors: theme.lightColors, darkColors: theme.darkColors },
+      }), { headers });
+    }
+
+    // POST /api/themes/:id/activate - Activate a theme
+    if (url.pathname.match(/^\/api\/themes\/[^/]+\/activate$/) && req.method === 'POST') {
+      const themeId = url.pathname.split('/')[3];
+      const theme = getTheme(themeId);
+      if (!theme || !theme.lightColors || !theme.darkColors) {
+        return new Response(JSON.stringify({ success: false, error: 'Theme not found or missing color sets' }), { status: 404, headers });
+      }
+
+      activeThemeId = themeId;
+
+      // 해당 테마의 캐릭터 목록 로드
+      const themeChars = getThemeCharacters(themeId);
+      if (themeChars.length > 0) {
+        // 기존 에이전트들 (서브에이전트 제외)에게 새 캐릭터 재배정
+        let idx = 0;
+        const updates: { agentKey: string; characterId: string }[] = [];
+        agentStates.forEach((state, key) => {
+          if (state.isSubagent) return;
+          const newCharId = themeChars[idx % themeChars.length]!.characterId;
+          idx++;
+          agentStates.set(key, { ...state, characterId: newCharId });
+          updates.push({ agentKey: key, characterId: newCharId });
+        });
+        // DB 일괄 반영
+        const upsert = db.prepare('INSERT OR REPLACE INTO agent_characters (agent_key, character_id) VALUES (?, ?)');
+        const batchUpsert = db.transaction((rows: { agentKey: string; characterId: string }[]) => {
+          for (const r of rows) upsert.run(r.agentKey, r.characterId);
+        });
+        batchUpsert(updates);
+        // characterCounter 리셋 (이후 신규 에이전트도 이 테마에서 배정)
+        characterCounter = 0;
+      }
+
+      broadcastThemeActivated(themeId, theme.lightColors, theme.darkColors);
+      broadcastAgentStates();
+
+      return new Response(JSON.stringify({ success: true, data: { themeId } }), { headers });
+    }
+
+    // POST /api/themes/upload - Upload a theme package (multipart)
+    if (url.pathname === '/api/themes/upload' && req.method === 'POST') {
+      const res = await handleThemeUpload(req);
+      if (res.status === 201) broadcastCharactersUpdated();
+      return res;
+    }
+
+    // GET /api/characters - All registered characters (across all themes)
+    if (url.pathname === '/api/characters' && req.method === 'GET') {
+      const characters = getAllCharacters();
+      // Attach sprites to each character
+      const result = characters.map(char => ({
+        ...char,
+        sprites: Object.fromEntries(
+          getCharacterSprites(char.id).map(s => [s.status, `/uploads/${s.filePath}`])
+        ),
+      }));
+      return new Response(JSON.stringify({ success: true, data: result }), {
+        headers: { ...headers, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // GET /api/themes/:id/characters - Characters + sprites for a specific theme
+    if (url.pathname.match(/^\/api\/themes\/[^/]+\/characters$/) && req.method === 'GET') {
+      const themeId = url.pathname.split('/')[3];
+      const characters = getThemeCharacters(themeId);
+      const result = characters.map(char => ({
+        ...char,
+        sprites: Object.fromEntries(
+          getCharacterSprites(char.id).map(s => [s.status, `/uploads/${s.filePath}`])
+        ),
+      }));
+      return new Response(JSON.stringify({ success: true, data: result }), {
+        headers: { ...headers, 'Content-Type': 'application/json' },
+      });
+    }
+
     // POST /api/themes - Create a new theme
     if (url.pathname === '/api/themes' && req.method === 'POST') {
       try {
@@ -612,7 +755,9 @@ const server = Bun.serve({
       
       const authorId = url.searchParams.get('authorId');
       const result = await deleteThemeById(id, authorId || undefined);
-      
+
+      if (result.success) broadcastCharactersUpdated();
+
       const status = result.success ? 200 : (result.error?.includes('not found') ? 404 : 403);
       return new Response(JSON.stringify(result), {
         status,

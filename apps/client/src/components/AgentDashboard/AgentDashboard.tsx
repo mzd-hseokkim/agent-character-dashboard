@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef, createRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, createRef } from 'react';
 import { TransitionGroup, CSSTransition } from 'react-transition-group';
-import { AlignJustify, LayoutGrid } from 'lucide-react';
 import { useSoundStore } from '../../stores/useSoundStore';
 import { AgentColumn } from './AgentColumn';
 import { FeedTooltip } from './FeedTooltip';
@@ -15,16 +14,16 @@ export type ViewMode = 'detail' | 'card';
 interface Props {
   agentStates: Record<string, AgentState>;
   events: HookEvent[];
+  viewMode: ViewMode;
 }
 
 const TOOLTIP_W = 320;
 
-export function AgentDashboard({ agentStates, events }: Props) {
+export function AgentDashboard({ agentStates, events, viewMode }: Props) {
   const { playSound } = useSoundStore();
   const [tick, setTick] = useState(0);
   const [celebratingKeys, setCelebratingKeys] = useState(new Set<string>());
   const [tip, setTip] = useState<TipState>({ visible: false, x: 0, y: 0, ev: null });
-  const [viewMode, setViewMode] = useState<ViewMode>('detail');
 
   const celebrateTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const colRefsRef = useRef(new Map<string, React.RefObject<HTMLDivElement | null>>());
@@ -37,6 +36,7 @@ export function AgentDashboard({ agentStates, events }: Props) {
   const prevEventsLengthRef = useRef(0);
   const prevAgentKeysRef = useRef<string[]>([]);
   const prevStatusesRef = useRef(new Map<string, string>());
+  const prevPositionsRef = useRef(new Map<string, { x: number; y: number }>());
 
   // Tick timer + cleanup
   useEffect(() => {
@@ -58,14 +58,18 @@ export function AgentDashboard({ agentStates, events }: Props) {
   const mainAgentKeyStr = mainAgents.map(([k]) => k).join(',');
   const mainAgentStatusStr = mainAgents.map(([k, a]) => `${k}:${a.status}`).join(',');
 
-  // Watch events length → detect SessionStart
+  // Watch events length → play sound on every new log event
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const prev = prevEventsLengthRef.current;
     prevEventsLengthRef.current = events.length;
     if (!prev || events.length <= prev) return;
     const newEv = events[events.length - 1];
-    if (newEv?.hook_event_type === 'SessionStart') playSound('session_start');
+    if (newEv?.hook_event_type === 'SessionStart') {
+      playSound('session_start');
+    } else {
+      playSound('log_tick');
+    }
   }, [events.length]);
 
   // Watch mainAgent keys → detect new agent appearance
@@ -110,6 +114,73 @@ export function AgentDashboard({ agentStates, events }: Props) {
     prevStatusesRef.current = next;
   }, [mainAgentStatusStr]);
 
+  // FLIP animation for card view reordering
+  useLayoutEffect(() => {
+    if (viewMode !== 'card') {
+      // Clear any in-progress FLIP transforms when leaving card view
+      for (const [, colRef] of colRefsRef.current) {
+        const el = colRef.current;
+        if (!el) continue;
+        el.style.transition = '';
+        el.style.transform = '';
+      }
+      prevPositionsRef.current.clear();
+      return;
+    }
+
+    // Step 1: clear any ongoing FLIP transforms so we read true grid positions
+    for (const [, colRef] of colRefsRef.current) {
+      const el = colRef.current;
+      if (!el) continue;
+      el.style.transition = 'none';
+      el.style.transform = '';
+    }
+
+    // Force reflow to commit the cleared transforms
+    let firstEl: HTMLElement | null = null;
+    for (const [, colRef] of colRefsRef.current) {
+      if (colRef.current) { firstEl = colRef.current; break; }
+    }
+    if (firstEl) firstEl.getBoundingClientRect();
+
+    // Step 2: read new (true) positions and compute FLIP offsets
+    const newPositions = new Map<string, { x: number; y: number }>();
+    const toAnimate: Array<HTMLElement> = [];
+
+    for (const [key, colRef] of colRefsRef.current) {
+      const el = colRef.current;
+      if (!el) continue;
+      // Skip elements that are entering or exiting (TransitionGroup handles those)
+      if (el.classList.contains('agent-col-enter') || el.classList.contains('agent-col-exit')) continue;
+
+      const rect = el.getBoundingClientRect();
+      newPositions.set(key, { x: rect.left, y: rect.top });
+
+      const prev = prevPositionsRef.current.get(key);
+      if (prev && (Math.abs(prev.x - rect.left) > 1 || Math.abs(prev.y - rect.top) > 1)) {
+        const dx = prev.x - rect.left;
+        const dy = prev.y - rect.top;
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        toAnimate.push(el);
+      }
+    }
+
+    if (toAnimate.length > 0) {
+      // Force reflow to commit the inverted transforms before animating
+      if (firstEl) firstEl.getBoundingClientRect();
+
+      // Step 3: play — animate each element to its final position
+      for (const el of toAnimate) {
+        el.style.transition = 'transform 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        el.style.transform = '';
+        el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+      }
+    }
+
+    prevPositionsRef.current = newPositions;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainAgentKeyStr, viewMode]);
+
   const handleMouseEnterFeedItem = useCallback((el: HTMLElement, ev: HookEvent) => {
     const inp = ev.payload?.tool_input;
     const p = ev.payload;
@@ -144,33 +215,12 @@ export function AgentDashboard({ agentStates, events }: Props) {
 
   return (
     <div className="console-layout">
-      <div className="dashboard-toolbar">
-        <div className="view-mode-toggle">
-          <button
-            className={`view-mode-btn${viewMode === 'detail' ? ' active' : ''}`}
-            onClick={() => setViewMode('detail')}
-            title="상세 뷰 — 카드 + 작업목록"
-          >
-            <AlignJustify size={12} />
-            상세
-          </button>
-          <button
-            className={`view-mode-btn${viewMode === 'card' ? ' active' : ''}`}
-            onClick={() => setViewMode('card')}
-            title="카드 뷰 — 카드만"
-          >
-            <LayoutGrid size={12} />
-            카드
-          </button>
-        </div>
-      </div>
-
       {mainAgents.length === 0 ? (
         <div className="empty-state">
           <div className="empty-text">에이전트 연결 대기 중...</div>
         </div>
       ) : (
-        <TransitionGroup component="div" className="columns-container">
+        <TransitionGroup component="div" className={`columns-container${viewMode === 'card' ? ' grid-mode' : ''}`}>
           {mainAgents.map(([key, agent]) => {
             const nodeRef = getColRef(key);
             return (

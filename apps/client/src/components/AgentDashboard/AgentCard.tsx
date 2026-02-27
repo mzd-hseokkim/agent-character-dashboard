@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Moon, RefreshCw, Zap, MessageSquare } from 'lucide-react';
 import { CSSTransition } from 'react-transition-group';
@@ -121,9 +121,26 @@ export function AgentCard({ agentKey, agent, events, tick, celebrating, onCycleC
   const celebrateNodeRef = useRef<HTMLDivElement>(null);
   const hitlHandRef = useRef<HTMLDivElement>(null);
   const [promptTip, setPromptTip] = useState<PromptTipState>({ visible: false, x: 0, y: 0, text: '' });
+  const [actionFlash, setActionFlash] = useState(false);
+  const prevActionKeyRef = useRef<string | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const live = isAgentLive(agent, tick);
   const actionInfo = getActionInfo(agentKey, events);
+
+  // 현재작업 변경 시 플래시
+  const actionKey = actionInfo ? `${actionInfo.label}|${actionInfo.detail ?? ''}` : null;
+  useEffect(() => {
+    if (prevActionKeyRef.current === null) { prevActionKeyRef.current = actionKey; return; }
+    if (prevActionKeyRef.current !== actionKey && actionKey !== null) {
+      prevActionKeyRef.current = actionKey;
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      setActionFlash(true);
+      flashTimerRef.current = setTimeout(() => setActionFlash(false), 550);
+    } else {
+      prevActionKeyRef.current = actionKey;
+    }
+  }, [actionKey]);
   const hitlPending = agentHasHitlPending(agentKey, agent, events);
   const latestPrompt = getLatestPrompt(agentKey, events);
   const ActionIcon = actionInfo?.Icon ?? Moon;
@@ -205,7 +222,7 @@ export function AgentCard({ agentKey, agent, events, tick, celebrating, onCycleC
       </div>
 
       {/* Current action */}
-      <div className={`card-action ${actionInfo?.phase ?? 'idle'}`}>
+      <div className={`card-action ${actionInfo?.phase ?? 'idle'}${actionFlash ? ' action-flash' : ''}`}>
         <span className="ca-icon"><ActionIcon size={13} /></span>
         <div className="ca-body">
           <div className="ca-main">{actionInfo?.label ?? '대기 중'}</div>
