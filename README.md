@@ -29,7 +29,9 @@ React 대시보드 (port 5174) ← WebSocket /stream
 ## 사전 요구사항
 
 - [Bun](https://bun.sh/) — 서버 런타임 및 패키지 매니저
-- [Python](https://www.python.org/) — 훅 스크립트 실행 (`python` 명령)
+- [Python 3](https://www.python.org/) — 훅 스크립트 실행
+  - macOS / Linux: `python3 --version` 으로 확인 (보통 기본 설치됨)
+  - Windows: `python --version` 으로 확인 ([python.org](https://www.python.org/downloads/) 또는 Microsoft Store에서 설치)
 - [Claude Code](https://claude.ai/code) — 관찰 대상 CLI
 
 ---
@@ -55,13 +57,13 @@ bun install
 **터미널 1 — 서버:**
 ```bash
 cd apps/server
-bun src/index.ts
+bun run dev
 ```
 
 **터미널 2 — 클라이언트:**
 ```bash
 cd apps/client
-bun dev
+bun run dev
 ```
 
 브라우저에서 `http://localhost:5174` 접속.
@@ -74,9 +76,16 @@ bun dev
 
 훅 설정 파일: `~/.claude/settings.json`
 
-### Windows 경로 주의
+### 경로 및 python 명령 설정
 
-`send_event.py` 경로를 **이 프로젝트의 실제 경로**로 변경해야 한다.
+`send_event.py`의 **절대 경로**를 이 저장소를 클론한 실제 위치로 변경해야 한다.
+
+| OS | python 명령 | 경로 형식 예시 |
+|----|------------|--------------|
+| macOS / Linux | `python3` | `/home/yourname/agent-character-dashboard` |
+| Windows | `python` | `C:/Users/yourname/agent-character-dashboard` |
+
+아래는 **macOS / Linux 기준** 예시다. Windows는 `python3`을 `python`으로, 경로를 Windows 형식으로 교체한다.
 
 ```json
 {
@@ -87,7 +96,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py PreToolUse",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py PreToolUse",
             "timeout": 5
           }
         ]
@@ -99,7 +108,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py PostToolUse",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py PostToolUse",
             "timeout": 5
           }
         ]
@@ -111,7 +120,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py UserPromptSubmit",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py UserPromptSubmit",
             "timeout": 5
           }
         ]
@@ -123,7 +132,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py Notification",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py Notification",
             "timeout": 5
           }
         ]
@@ -134,7 +143,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py PermissionRequest",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py PermissionRequest",
             "timeout": 5
           }
         ]
@@ -145,7 +154,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py Stop",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py Stop",
             "timeout": 5
           }
         ]
@@ -156,7 +165,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py SubagentStart",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py SubagentStart",
             "timeout": 5
           }
         ]
@@ -167,7 +176,7 @@ bun dev
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/WORK/workspace/agent-character-dashboard/.claude/hooks/send_event.py SubagentStop",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py SubagentStop",
             "timeout": 5
           }
         ]
@@ -421,7 +430,7 @@ agent-character-dashboard/
 
 1. **서버 실행 확인**: `http://localhost:4000/agents` 에서 JSON 응답 오는지 확인
 2. **훅 경로 확인**: `~/.claude/settings.json`의 `send_event.py` 경로가 실제 파일 위치와 일치하는지 확인
-3. **python 명령 확인**: 터미널에서 `python --version` 실행. `python3`만 있다면 훅 커맨드를 `python3`으로 변경
+3. **python 명령 확인**: 터미널에서 `python3 --version`(macOS/Linux) 또는 `python --version`(Windows)으로 Python 3이 설치되어 있는지 확인한다. 훅 커맨드의 `python3` / `python`이 실제 실행 가능한 명령과 일치해야 한다.
 4. **방화벽 확인**: `localhost:4000` 포트 접근 차단 여부 확인
 5. **isSubagent 오분류**: 서버 재시작 후 오래된 세션이 서브에이전트로 분류될 수 있음. `http://localhost:4000/agents`에서 `isSubagent` 값 확인
 
