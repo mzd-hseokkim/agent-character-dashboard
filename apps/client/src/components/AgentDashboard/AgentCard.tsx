@@ -71,7 +71,9 @@ function timeAgo(ts: number, tick: number): string {
 
 function isAgentLive(agent: AgentState, tick: number): boolean {
   void tick;
-  return Date.now() - agent.lastUpdated < 5000;
+  const recentUpdate = Date.now() - agent.lastUpdated < 30000;
+  const activeStatus = !['DONE', 'OFFLINE'].includes(agent.status);
+  return recentUpdate && activeStatus;
 }
 
 function getLatestPrompt(agentKey: string, events: HookEvent[]): string {
