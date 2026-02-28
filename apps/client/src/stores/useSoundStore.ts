@@ -44,6 +44,7 @@ export type SoundEvent =
   | 'done'
   | 'error'
   | 'blocked'
+  | 'hitl_request'
   | 'work_start'
   | 'session_end'
   | 'session_start'
@@ -56,6 +57,7 @@ const SOUND_DURATIONS: Record<SoundEvent, number> = {
   done:          0.75,
   error:         0.45,
   blocked:       0.35,
+  hitl_request:  0.85,
   reentry:       1.00,
   work_start:    0.20,
   log_tick:      0.15,
@@ -94,6 +96,15 @@ const SOUNDS: Record<SoundEvent, (ac: BaseAudioContext) => void> = {
     const t = ac.currentTime;
     osc(ac, 'square', 880, 0.10, t,        t + 0.08);
     osc(ac, 'square', 880, 0.10, t + 0.12, t + 0.20);
+  },
+
+  // HITL 손 들기: 상승하는 3음 어텐션 차임 (blocked와 구별되는 부드러운 알림)
+  hitl_request(ac) {
+    const t = ac.currentTime;
+    osc(ac, 'triangle', 523,  0.12, t,        t + 0.14);  // C5
+    osc(ac, 'triangle', 784,  0.13, t + 0.13, t + 0.27);  // G5
+    osc(ac, 'triangle', 1047, 0.15, t + 0.24, t + 0.55);  // C6 — 유지
+    osc(ac, 'sine',     1047, 0.06, t + 0.42, t + 0.80);  // C6 — 긴 페이드
   },
 
   // 재입장 (유휴/오프라인 → 작업): 짜잔 팡파레

@@ -4,6 +4,7 @@ import { TransitionGroup, CSSTransition } from 'react-transition-group';
 import { Key, MessageSquare, List, Check, X, Send } from 'lucide-react';
 import type { HookEvent, HumanInTheLoopResponse } from '../types';
 import { API_BASE_URL } from '../config';
+import { useSoundStore } from '../stores/useSoundStore';
 import '../styles/hitl.css';
 
 interface Props {
@@ -134,6 +135,16 @@ export function HitlOverlay({ events }: Props) {
     () => events.filter(ev => ev.humanInTheLoop && ev.id !== undefined && ev.humanInTheLoopStatus?.status === 'pending'),
     [events]
   );
+
+  // 새 HITL 요청 등장 시 사운드 재생
+  const playSound = useSoundStore(s => s.playSound);
+  const prevPendingIdsRef = useRef(new Set<number>());
+  useEffect(() => {
+    const prev = prevPendingIdsRef.current;
+    const hasNew = pendingHitl.some(ev => !prev.has(ev.id!));
+    if (hasNew) playSound('hitl_request');
+    prevPendingIdsRef.current = new Set(pendingHitl.map(ev => ev.id!));
+  }, [pendingHitl, playSound]);
 
   function respondPermission(ev: HookEvent, allowed: boolean) {
     post(ev, { permission: allowed });
