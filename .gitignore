@@ -7,3 +7,4 @@ dist/
 *.db-wal
 .claude/settings.local.json
 apps/server/nul
+apps/server/uploads/

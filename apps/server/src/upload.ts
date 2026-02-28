@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { insertTheme, insertThemeCharacter, insertCharacterSprite } from './db';
 import type { Theme, ThemeCharacter, CharacterSprite } from './types';
 
@@ -208,4 +208,99 @@ export async function handleThemeUpload(req: Request): Promise<Response> {
     message: 'Theme package uploaded successfully',
     data: { theme, characters: savedCharacters, sprites: savedSprites },
   }), { status: 201, headers: CORS });
+}
+
+/** 기존 테마에 캐릭터 한 명 추가 */
+export async function handleAddThemeCharacter(req: Request, themeId: string): Promise<Response> {
+  const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' };
+
+  let formData: any;
+  try { formData = await req.formData(); } catch { return errResp('Invalid multipart form data'); }
+
+  const metadataRaw = formData.get('metadata');
+  if (typeof metadataRaw !== 'string') return errResp('Missing metadata field');
+
+  let char: any;
+  try { char = JSON.parse(metadataRaw); } catch { return errResp('metadata must be valid JSON'); }
+
+  if (!char?.characterId || !char?.displayName || !char?.spritePrefix) {
+    return errResp('Missing required fields: characterId, displayName, spritePrefix');
+  }
+  if (!/^[a-z0-9_-]+$/.test(char.characterId)) {
+    return errResp('characterId must be lowercase alphanumeric, hyphens, underscores');
+  }
+
+  const fileBuffers = new Map<string, { buffer: Uint8Array; size: number }>();
+  for (const status of VALID_STATUSES) {
+    const key = `${char.characterId}_${status}`;
+    const file = formData.get(key);
+    if (!file || !(file instanceof File)) continue;
+    if (file.size > MAX_FILE_SIZE) return errResp(`File ${key} exceeds 2MB limit`);
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    if (!isValidGif(buffer)) return errResp(`File ${key} is not a valid GIF`);
+    fileBuffers.set(key, { buffer, size: file.size });
+  }
+
+  if (!fileBuffers.has(`${char.characterId}_FORCE`)) {
+    return errResp('Missing required FORCE sprite');
+  }
+
+  const now = Date.now();
+  const charDbId = generateId();
+  const prefix = char.spritePrefix.toString().toUpperCase();
+
+  const themeChar: ThemeCharacter = {
+    id: charDbId,
+    themeId,
+    characterId: char.characterId,
+    displayName: char.displayName,
+    spritePrefix: prefix,
+    sortOrder: 999,
+    createdAt: now,
+  };
+
+  try {
+    insertThemeCharacter(themeChar);
+  } catch (e: any) {
+    if (e?.message?.includes('UNIQUE')) {
+      return errResp(`Character "${char.characterId}" already exists in this theme`, 409);
+    }
+    throw e;
+  }
+
+  const charDir = `${UPLOADS_BASE}/${themeId}/${char.characterId}`;
+  await mkdir(charDir, { recursive: true });
+
+  const savedSprites: CharacterSprite[] = [];
+  for (const status of VALID_STATUSES) {
+    const key = `${char.characterId}_${status}`;
+    const entry = fileBuffers.get(key);
+    if (!entry) continue;
+
+    const filename = `${prefix}_${status}.gif`;
+    await Bun.write(`${charDir}/${filename}`, entry.buffer);
+
+    const sprite: CharacterSprite = {
+      id: generateId(),
+      characterId: charDbId,
+      status,
+      filePath: `sprites/${themeId}/${char.characterId}/${filename}`,
+      fileSize: entry.size,
+      mimeType: 'image/gif',
+      createdAt: now,
+    };
+    insertCharacterSprite(sprite);
+    savedSprites.push(sprite);
+  }
+
+  return new Response(JSON.stringify({
+    success: true,
+    message: 'Character added successfully',
+    data: { character: themeChar, sprites: savedSprites },
+  }), { status: 201, headers: CORS });
+}
+
+/** 캐릭터 디렉토리 삭제 */
+export async function deleteThemeCharacterFiles(themeId: string, characterId: string): Promise<void> {
+  await rm(`${UPLOADS_BASE}/${themeId}/${characterId}`, { recursive: true, force: true });
 }

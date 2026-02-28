@@ -30,7 +30,17 @@ export async function fetchCharacters(): Promise<void> {
     const res = await fetch(`${API_BASE_URL}/api/characters`);
     const json = await res.json();
     if (json.success) {
-      useWebSocketStore.getState()._setCharacters(json.data);
+      // 서버가 반환하는 스프라이트 URL은 상대 경로(/uploads/...)이므로 API_BASE_URL을 붙여 절대 URL로 변환
+      const chars = (json.data as import('../stores/useWebSocketStore').CharacterEntry[]).map(char => ({
+        ...char,
+        sprites: Object.fromEntries(
+          Object.entries(char.sprites).map(([status, url]) => [
+            status,
+            (url as string).startsWith('http') ? url : `${API_BASE_URL}${url}`,
+          ])
+        ),
+      }));
+      useWebSocketStore.getState()._setCharacters(chars);
     }
   } catch (err) {
     console.error('[useCharacters] Failed to fetch characters:', err);

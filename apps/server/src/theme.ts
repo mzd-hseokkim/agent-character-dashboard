@@ -190,54 +190,45 @@ export async function updateThemeById(id: string, updates: any): Promise<ApiResp
   try {
     const existingTheme = getTheme(id);
     if (!existingTheme) {
-      return {
-        success: false,
-        error: 'Theme not found'
-      };
+      return { success: false, error: 'Theme not found' };
     }
-    
-    const sanitized = sanitizeTheme(updates);
-    
-    // Don't allow changing the name after creation
-    delete sanitized.name;
-    
-    const errors = validateTheme({ ...existingTheme, ...sanitized });
-    
-    if (errors.length > 0) {
-      return {
-        success: false,
-        error: 'Validation failed',
-        validationErrors: errors
-      };
+
+    const updateData: Partial<Theme> & { updatedAt: number } = { updatedAt: Date.now() };
+
+    if (updates.displayName !== undefined) {
+      const dn = updates.displayName?.toString().trim();
+      if (!dn) return { success: false, error: 'displayName cannot be empty' };
+      updateData.displayName = dn;
     }
-    
-    const updateData = {
-      ...sanitized,
-      updatedAt: Date.now()
-    };
-    
+    if (updates.description !== undefined) {
+      updateData.description = updates.description?.toString().trim() || '';
+    }
+    if (updates.isPublic !== undefined) {
+      updateData.isPublic = Boolean(updates.isPublic);
+    }
+    if (updates.tags !== undefined) {
+      updateData.tags = Array.isArray(updates.tags)
+        ? updates.tags.filter((t: any) => typeof t === 'string' && t.trim())
+        : [];
+    }
+    if (updates.lightColors !== undefined) {
+      updateData.lightColors = updates.lightColors;
+      updateData.colors = updates.lightColors; // keep legacy colors field in sync
+    }
+    if (updates.darkColors !== undefined) {
+      updateData.darkColors = updates.darkColors;
+    }
+
     const success = updateTheme(id, updateData);
-    
     if (!success) {
-      return {
-        success: false,
-        error: 'Failed to update theme'
-      };
+      return { success: false, error: 'Failed to update theme' };
     }
-    
+
     const updatedTheme = getTheme(id);
-    
-    return {
-      success: true,
-      data: updatedTheme!,
-      message: 'Theme updated successfully'
-    };
+    return { success: true, data: updatedTheme!, message: 'Theme updated successfully' };
   } catch (error) {
     console.error('Error updating theme:', error);
-    return {
-      success: false,
-      error: 'Internal server error'
-    };
+    return { success: false, error: 'Internal server error' };
   }
 }
 
@@ -272,13 +263,7 @@ export async function getThemeById(id: string): Promise<ApiResponse<Theme>> {
 
 export async function searchThemes(query: ThemeSearchQuery): Promise<ApiResponse<Theme[]>> {
   try {
-    // Default to only public themes unless specific author requested
-    const searchQuery = {
-      ...query,
-      isPublic: query.authorId ? undefined : true
-    };
-    
-    const themes = getThemes(searchQuery);
+    const themes = getThemes(query);
     
     return {
       success: true,

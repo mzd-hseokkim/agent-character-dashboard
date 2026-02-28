@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useId, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Trash2, ChevronRight, ChevronLeft, Upload, CheckCircle, Palette, Users, FileText, Copy, List } from 'lucide-react';
+import { X, Plus, Trash2, ChevronRight, ChevronLeft, Upload, CheckCircle, Palette, Users, FileText, Copy, List, Pencil } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { fetchCharacters } from '../hooks/useCharacters';
 import { useWebSocketStore } from '../stores/useWebSocketStore';
@@ -368,11 +368,505 @@ interface ThemeItem {
   darkColors?: Record<string, string>;
 }
 
+interface ThemeCharacterDetail {
+  id: string;
+  themeId: string;
+  characterId: string;
+  displayName: string;
+  spritePrefix: string;
+  sprites: Record<string, string>; // status → absolute URL
+}
+
+async function fetchThemeCharacters(themeId: string): Promise<ThemeCharacterDetail[]> {
+  const res = await fetch(`${API_BASE_URL}/api/themes/${themeId}/characters`);
+  const json = await res.json();
+  if (!json.success) return [];
+  return (json.data as any[]).map((char: any) => ({
+    ...char,
+    sprites: Object.fromEntries(
+      Object.entries(char.sprites || {}).map(([k, v]) => [
+        k,
+        (v as string).startsWith('http') ? v : `${API_BASE_URL}${v}`,
+      ])
+    ),
+  }));
+}
+
+function ColorSwatchGrid({ colors, label }: { colors: Record<string, string>; label: string }) {
+  return (
+    <div>
+      <div className={`text-[10px] ${S.textMuted} uppercase tracking-widest mb-1.5`}>{label}</div>
+      <div className="flex flex-wrap gap-1">
+        {COLOR_TOKENS.map(t => (
+          <div
+            key={t.key}
+            className={`w-5 h-5 rounded border ${S.border2} flex-shrink-0`}
+            style={{ background: colors[t.key] || 'transparent' }}
+            title={`${t.label}: ${colors[t.key]}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AddCharacterPanel({ themeId, onAdded, onCancel }: {
+  themeId: string;
+  onAdded: () => void;
+  onCancel: () => void;
+}) {
+  const [char, setChar] = useState<CharacterDef>({
+    localId: 'new-char',
+    characterId: '', displayName: '', spritePrefix: '', sprites: {}, previews: {},
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit = char.characterId.trim() && char.displayName.trim() && char.spritePrefix.trim() && !!char.sprites['FORCE'];
+
+  const handleAdd = async () => {
+    setSubmitting(true);
+    setError(null);
+    const fd = new FormData();
+    fd.append('metadata', JSON.stringify({
+      characterId: char.characterId,
+      displayName: char.displayName,
+      spritePrefix: char.spritePrefix,
+    }));
+    for (const status of SPRITE_STATUSES) {
+      const f = char.sprites[status];
+      if (f) fd.append(`${char.characterId}_${status}`, f);
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/themes/${themeId}/characters`, { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok || !json.success) { setError(json.error ?? 'Failed'); setSubmitting(false); return; }
+      Object.values(char.previews).forEach(url => { if (url) URL.revokeObjectURL(url); });
+      onAdded();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className={`border ${S.border1} rounded-lg p-3 ${S.bgCard}`}>
+      <p className={`text-xs font-medium ${S.textSecondary} mb-3`}>새 캐릭터 추가</p>
+      <CharacterEditor char={char} onUpdate={setChar} onRemove={onCancel} />
+      {error && <p className={`mt-2 text-xs ${S.textError}`}>{error}</p>}
+      <div className="flex justify-end gap-2 mt-3">
+        <button onClick={onCancel} className={`text-xs px-3 py-1.5 ${S.bgCard} border ${S.border2} rounded ${S.textMuted}`}>취소</button>
+        <button
+          onClick={handleAdd}
+          disabled={!canSubmit || submitting}
+          className={`text-xs px-3 py-1.5 rounded transition-colors ${canSubmit && !submitting
+            ? `${S.bgCard} border border-[var(--theme-accent-success)] ${S.textSuccess}`
+            : `${S.bgCard} border ${S.border2} ${S.textMuted} cursor-not-allowed`}`}
+        >
+          {submitting ? '추가 중...' : '추가'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+function fillColorSet(base: () => ColorSet, src?: Record<string, string>): ColorSet {
+  const filled = base();
+  if (src) {
+    for (const t of COLOR_TOKENS) {
+      if (src[t.key]) filled[t.key] = src[t.key];
+    }
+  }
+  return filled;
+}
+
+// ── ThemeCard ─────────────────────────────────────────────────────────────────
+
+function ThemeCard({ theme, activeThemeId, activating, onActivate, onDelete, onRefresh }: {
+  theme: ThemeItem;
+  activeThemeId: string | null;
+  activating: string | null;
+  onActivate: (id: string) => void;
+  onDelete: (id: string) => void;
+  onRefresh: () => void;
+}) {
+  const isActive = theme.id === activeThemeId;
+  const hasColors = !!theme.lightColors && !!theme.darkColors;
+
+  const [expanded, setExpanded] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editTab, setEditTab] = useState<'meta' | 'colors' | 'characters'>('meta');
+
+  // Edit meta
+  const [editDisplayName, setEditDisplayName] = useState(theme.displayName);
+  const [editDescription, setEditDescription] = useState(theme.description ?? '');
+  const [editTagsInput, setEditTagsInput] = useState((theme.tags ?? []).join(', '));
+
+  // Edit colors
+  const [editLightColors, setEditLightColors] = useState<ColorSet>(() => fillColorSet(defaultLightColors, theme.lightColors));
+  const [editDarkColors, setEditDarkColors] = useState<ColorSet>(() => fillColorSet(defaultDarkColors, theme.darkColors));
+  const [editColorTab, setEditColorTab] = useState<'light' | 'dark'>('light');
+
+  // Characters
+  const [chars, setChars] = useState<ThemeCharacterDetail[]>([]);
+  const [charsLoading, setCharsLoading] = useState(false);
+  const [addingChar, setAddingChar] = useState(false);
+
+  // Save / delete state
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const loadChars = useCallback(() => {
+    setCharsLoading(true);
+    fetchThemeCharacters(theme.id).then(setChars).finally(() => setCharsLoading(false));
+  }, [theme.id]);
+
+  useEffect(() => {
+    if (expanded) loadChars();
+  }, [expanded, loadChars]);
+
+  const enterEdit = useCallback(() => {
+    setEditDisplayName(theme.displayName);
+    setEditDescription(theme.description ?? '');
+    setEditTagsInput((theme.tags ?? []).join(', '));
+    setEditLightColors(fillColorSet(defaultLightColors, theme.lightColors));
+    setEditDarkColors(fillColorSet(defaultDarkColors, theme.darkColors));
+    setEditTab('meta');
+    setSaveError(null);
+    setEditMode(true);
+  }, [theme]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    const tags = editTagsInput.split(',').map(t => t.trim()).filter(Boolean);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/themes/${theme.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: editDisplayName.trim(),
+          description: editDescription.trim(),
+          tags,
+          lightColors: editLightColors,
+          darkColors: editDarkColors,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) { setSaveError(json.error ?? 'Save failed'); return; }
+      setEditMode(false);
+      onRefresh();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteChar = async (charId: string) => {
+    try {
+      await fetch(`${API_BASE_URL}/api/themes/${theme.id}/characters/${charId}`, { method: 'DELETE' });
+      setChars(prev => prev.filter(c => c.id !== charId));
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div
+      className={[
+        `border rounded-lg transition-colors`,
+        isActive ? `border-[var(--theme-accent-success)] ${S.bgCard}` : `${S.border1} ${S.bgModal}`,
+      ].join(' ')}
+      onClick={() => setConfirmDelete(false)}
+    >
+      {/* Card header */}
+      <div className="flex items-start gap-2 p-3">
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(x => !x); if (editMode) setEditMode(false); }}
+          className={`mt-0.5 flex-shrink-0 ${S.textMuted} hover:${S.textSecondary} transition-colors`}
+        >
+          <ChevronRight size={14} className={`transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isActive && (
+              <span className={`text-[9px] border border-[var(--theme-accent-success)] ${S.textSuccess} px-1.5 py-0.5 rounded-full`}
+                style={{ background: 'var(--theme-hover-bg)' }}>활성</span>
+            )}
+            <span className={`text-xs font-medium ${S.textPrimary}`}>{theme.displayName}</span>
+            <span className={`text-[10px] ${S.textMuted} font-mono`}>{theme.name}</span>
+            {!hasColors && <span className={`text-[9px] ${S.textError} opacity-70`}>색상 없음</span>}
+          </div>
+          {theme.description && (
+            <p className={`text-[10px] ${S.textTertiary} mt-0.5 truncate`}>{theme.description}</p>
+          )}
+          {(theme.tags ?? []).length > 0 && (
+            <div className="flex gap-1 mt-1 flex-wrap">
+              {theme.tags.map(tag => (
+                <span key={tag} className={`text-[9px] px-1.5 py-0.5 ${S.bgSection} border ${S.border2} ${S.textMuted} rounded`}>{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0 pt-0.5">
+          {!isActive && hasColors && (
+            <button
+              onClick={e => { e.stopPropagation(); onActivate(theme.id); }}
+              disabled={!!activating}
+              className={`px-2 py-1 ${S.bgCard} border border-[var(--theme-accent-success)] rounded text-[10px] ${S.textSuccess} hover:${S.bgSection} transition-colors disabled:opacity-50`}
+            >
+              {activating === theme.id ? '적용 중...' : '활성화'}
+            </button>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); setExpanded(true); enterEdit(); }}
+            className={`p-1.5 ${S.textMuted} hover:${S.textSecondary} transition-colors`}
+            title="편집"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              if (!confirmDelete) { setConfirmDelete(true); }
+              else { setConfirmDelete(false); onDelete(theme.id); }
+            }}
+            className={[
+              `flex items-center gap-1 px-2 py-1 rounded text-[10px] border transition-colors`,
+              confirmDelete
+                ? `${S.bgCard} border-[var(--theme-accent-error)] ${S.textError}`
+                : `bg-transparent border-transparent ${S.textMuted} hover:${S.textError}`,
+            ].join(' ')}
+            title={confirmDelete ? '한 번 더 클릭하면 삭제' : '삭제'}
+          >
+            {confirmDelete ? '확인?' : <Trash2 size={11} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className={`border-t ${S.border1} px-4 pb-4 pt-3`}>
+          {!editMode ? (
+            /* ── Read-only detail ── */
+            <div className="space-y-3">
+              {hasColors && (
+                <div className="grid grid-cols-2 gap-3">
+                  <ColorSwatchGrid colors={theme.lightColors!} label="Light" />
+                  <ColorSwatchGrid colors={theme.darkColors!} label="Dark" />
+                </div>
+              )}
+              <div>
+                <div className={`text-[10px] ${S.textMuted} uppercase tracking-widest mb-1.5`}>캐릭터</div>
+                {charsLoading ? (
+                  <p className={`text-xs ${S.textMuted}`}>로딩 중...</p>
+                ) : chars.length === 0 ? (
+                  <p className={`text-xs ${S.textMuted}`}>캐릭터 없음</p>
+                ) : (
+                  <div className="flex gap-2 flex-wrap">
+                    {chars.map(c => (
+                      <div key={c.id} className="flex flex-col items-center gap-1">
+                        <div className={`w-10 h-10 rounded border ${S.border2} ${S.bgCard} overflow-hidden`}>
+                          {c.sprites['FORCE'] ? (
+                            <img src={c.sprites['FORCE']} alt={c.displayName}
+                              className="w-full h-full object-contain"
+                              style={{ imageRendering: 'pixelated' }} />
+                          ) : (
+                            <div className={`w-full h-full flex items-center justify-center ${S.textMuted}`}>
+                              <Users size={12} />
+                            </div>
+                          )}
+                        </div>
+                        <span className={`text-[9px] ${S.textTertiary} text-center max-w-[42px] truncate`}>{c.displayName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={enterEdit}
+                  className={`flex items-center gap-1 text-xs ${S.textMuted} hover:${S.textSecondary} transition-colors`}
+                >
+                  <Pencil size={11} /> 편집
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── Edit mode ── */
+            <div className="space-y-3">
+              {/* Edit tabs */}
+              <div className={`flex rounded overflow-hidden border ${S.border2} w-fit`}>
+                {(['meta', 'colors', 'characters'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setEditTab(tab)}
+                    className={[
+                      'px-3 py-1 text-xs transition-colors',
+                      editTab === tab ? `${S.bgCard} ${S.textSecondary}` : `${S.textMuted} hover:${S.textSecondary}`,
+                    ].join(' ')}
+                  >
+                    {tab === 'meta' ? '메타데이터' : tab === 'colors' ? '색상' : '캐릭터'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Meta tab */}
+              {editTab === 'meta' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className={`text-[10px] ${S.textTertiary} uppercase tracking-widest block mb-1`}>Display Name</label>
+                    <input
+                      type="text"
+                      value={editDisplayName}
+                      onChange={e => setEditDisplayName(e.target.value)}
+                      className={`w-full text-xs ${S.bgInput} border ${S.border2} rounded px-2 py-1.5 ${S.textPrimary} ${S.focusInput}`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-[10px] ${S.textTertiary} uppercase tracking-widest block mb-1`}>Description</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      rows={2}
+                      className={`w-full text-xs ${S.bgInput} border ${S.border2} rounded px-2 py-1.5 ${S.textPrimary} ${S.focusInput} resize-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-[10px] ${S.textTertiary} uppercase tracking-widest block mb-1`}>Tags (쉼표 구분)</label>
+                    <input
+                      type="text"
+                      value={editTagsInput}
+                      onChange={e => setEditTagsInput(e.target.value)}
+                      placeholder="fantasy, dark, anime"
+                      className={`w-full text-xs ${S.bgInput} border ${S.border2} rounded px-2 py-1.5 ${S.textPrimary} ${S.focusInput}`}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Colors tab */}
+              {editTab === 'colors' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`flex rounded overflow-hidden border ${S.border2}`}>
+                      {(['light', 'dark'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setEditColorTab(tab)}
+                          className={[
+                            'px-3 py-1 text-xs transition-colors',
+                            editColorTab === tab ? `${S.bgCard} ${S.textSecondary}` : `${S.textMuted} hover:${S.textSecondary}`,
+                          ].join(' ')}
+                        >
+                          {tab === 'light' ? '라이트' : '다크'}
+                        </button>
+                      ))}
+                    </div>
+                    {editColorTab === 'dark' && (
+                      <button
+                        onClick={() => setEditDarkColors({ ...editLightColors })}
+                        className={`flex items-center gap-1 text-xs ${S.textMuted} hover:${S.textSecondary} transition-colors`}
+                      >
+                        <Copy size={11} /> 라이트에서 복사
+                      </button>
+                    )}
+                  </div>
+                  {editColorTab === 'light'
+                    ? <ColorGrid colors={editLightColors} onChange={(k, v) => setEditLightColors(p => ({ ...p, [k]: v }))} />
+                    : <ColorGrid colors={editDarkColors}  onChange={(k, v) => setEditDarkColors(p => ({ ...p, [k]: v }))} />
+                  }
+                </div>
+              )}
+
+              {/* Characters tab */}
+              {editTab === 'characters' && (
+                <div className="space-y-2">
+                  {charsLoading ? (
+                    <p className={`text-xs ${S.textMuted}`}>로딩 중...</p>
+                  ) : (
+                    <>
+                      {chars.map(c => (
+                        <div key={c.id} className={`flex items-center gap-2 p-2 border ${S.border1} rounded-lg ${S.bgCard}`}>
+                          <div className={`w-8 h-8 rounded border ${S.border2} overflow-hidden flex-shrink-0`}>
+                            {c.sprites['FORCE'] ? (
+                              <img src={c.sprites['FORCE']} alt={c.displayName}
+                                className="w-full h-full object-contain"
+                                style={{ imageRendering: 'pixelated' }} />
+                            ) : (
+                              <div className={`w-full h-full flex items-center justify-center ${S.textMuted}`}><Users size={10} /></div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs ${S.textPrimary}`}>{c.displayName}</p>
+                            <p className={`text-[10px] ${S.textMuted} font-mono`}>{c.characterId}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteChar(c.id)}
+                            className={`${S.textMuted} hover:${S.textError} transition-colors flex-shrink-0`}
+                            title="캐릭터 삭제"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      {!addingChar ? (
+                        <button
+                          onClick={() => setAddingChar(true)}
+                          className={`flex items-center gap-1.5 text-xs ${S.textMuted} hover:${S.textSecondary} transition-colors mt-1`}
+                        >
+                          <Plus size={11} /> 캐릭터 추가
+                        </button>
+                      ) : (
+                        <AddCharacterPanel
+                          themeId={theme.id}
+                          onAdded={() => { setAddingChar(false); loadChars(); }}
+                          onCancel={() => setAddingChar(false)}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {saveError && <p className={`text-xs ${S.textError}`}>{saveError}</p>}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => { setEditMode(false); setSaveError(null); }}
+                  className={`text-xs px-3 py-1.5 ${S.bgCard} border ${S.border2} rounded ${S.textMuted}`}
+                >
+                  {editTab === 'characters' ? '완료' : '취소'}
+                </button>
+                {editTab !== 'characters' && (
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || !editDisplayName.trim()}
+                    className={`text-xs px-3 py-1.5 rounded transition-colors ${saving || !editDisplayName.trim()
+                      ? `${S.bgCard} border ${S.border2} ${S.textMuted} cursor-not-allowed`
+                      : `${S.bgCard} border border-[var(--theme-accent-success)] ${S.textSuccess}`
+                    }`}
+                  >
+                    {saving ? '저장 중...' : '저장'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ThemeList({ activeThemeId, onClose }: { activeThemeId: string | null; onClose: () => void }) {
   const [themes, setThemes] = useState<ThemeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const loadThemes = useCallback(() => {
     setLoading(true);
@@ -397,14 +891,12 @@ function ThemeList({ activeThemeId, onClose }: { activeThemeId: string | null; o
   }, [onClose]);
 
   const handleDelete = useCallback(async (themeId: string) => {
-    if (confirmDelete !== themeId) { setConfirmDelete(themeId); return; }
-    setConfirmDelete(null);
     try {
       await fetch(`${API_BASE_URL}/api/themes/${themeId}`, { method: 'DELETE' });
       await fetchCharacters();
       setThemes(prev => prev.filter(t => t.id !== themeId));
     } catch { /* ignore */ }
-  }, [confirmDelete]);
+  }, []);
 
   if (loading) return (
     <div className={`flex items-center justify-center py-12 text-xs ${S.textMuted}`}>로딩 중...</div>
@@ -418,78 +910,18 @@ function ThemeList({ activeThemeId, onClose }: { activeThemeId: string | null; o
   );
 
   return (
-    <div className="space-y-2" onClick={() => setConfirmDelete(null)}>
-      {themes.map(theme => {
-        const isActive = theme.id === activeThemeId;
-        const hasColors = !!theme.lightColors && !!theme.darkColors;
-        const isDelConfirm = confirmDelete === theme.id;
-
-        return (
-          <div
-            key={theme.id}
-            className={[
-              `border rounded-lg p-3 transition-colors`,
-              isActive
-                ? `border-[var(--theme-accent-success)] ${S.bgCard}`
-                : `${S.border1} ${S.bgModal}`,
-            ].join(' ')}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {isActive && (
-                    <span className={`text-[9px] border border-[var(--theme-accent-success)] ${S.textSuccess} px-1.5 py-0.5 rounded-full font-medium`}
-                      style={{ background: 'var(--theme-hover-bg)' }}>
-                      활성
-                    </span>
-                  )}
-                  <span className={`text-xs font-medium ${S.textPrimary}`}>{theme.displayName}</span>
-                  <span className={`text-[10px] ${S.textMuted} font-mono`}>{theme.name}</span>
-                  {!hasColors && (
-                    <span className={`text-[9px] ${S.textError} opacity-70`}>색상 없음</span>
-                  )}
-                </div>
-                {theme.description && (
-                  <p className={`text-[10px] ${S.textTertiary} mt-0.5 truncate`}>{theme.description}</p>
-                )}
-                {theme.tags?.length > 0 && (
-                  <div className="flex gap-1 mt-1.5 flex-wrap">
-                    {theme.tags.map(tag => (
-                      <span key={tag} className={`text-[9px] px-1.5 py-0.5 ${S.bgCard} border ${S.border2} ${S.textMuted} rounded`}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
-                {!isActive && hasColors && (
-                  <button
-                    onClick={() => handleActivate(theme.id)}
-                    disabled={!!activating}
-                    className={`px-2.5 py-1 ${S.bgCard} border border-[var(--theme-accent-success)] rounded text-[10px] ${S.textSuccess} hover:${S.bgSection} transition-colors disabled:opacity-50`}
-                  >
-                    {activating === theme.id ? '적용 중...' : '활성화'}
-                  </button>
-                )}
-                <button
-                  onClick={e => { e.stopPropagation(); handleDelete(theme.id); }}
-                  className={[
-                    `flex items-center gap-1 px-2 py-1 rounded text-[10px] border transition-colors`,
-                    isDelConfirm
-                      ? `${S.bgCard} border-[var(--theme-accent-error)] ${S.textError}`
-                      : `bg-transparent border-transparent ${S.textMuted} hover:${S.textError}`,
-                  ].join(' ')}
-                  title={isDelConfirm ? '한 번 더 클릭하면 삭제' : '삭제'}
-                >
-                  {isDelConfirm ? '확인?' : <Trash2 size={11} />}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })}
+    <div className="space-y-2">
+      {themes.map(theme => (
+        <ThemeCard
+          key={theme.id}
+          theme={theme}
+          activeThemeId={activeThemeId}
+          activating={activating}
+          onActivate={handleActivate}
+          onDelete={handleDelete}
+          onRefresh={loadThemes}
+        />
+      ))}
     </div>
   );
 }

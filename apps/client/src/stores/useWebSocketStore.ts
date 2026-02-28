@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { useEffect } from 'react';
 import type { HookEvent, WebSocketMessage } from '../types/index';
+import { useSoundStore } from './useSoundStore';
 
 export type AgentStatus = 'WORKING' | 'THINKING' | 'WAITING' | 'DONE' | 'ERROR' | 'BLOCKED' | 'OFFLINE' | 'ORCHESTRATING' | 'READING';
 
@@ -49,6 +50,10 @@ interface WebSocketStore {
 
 const MAX_EVENTS = parseInt(import.meta.env.VITE_MAX_EVENTS_TO_DISPLAY || '300');
 
+function sound() {
+  return useSoundStore.getState();
+}
+
 export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   events: [],
   agentStates: {},
@@ -63,7 +68,6 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   _setConnected: (v) => set({ isConnected: v }),
   _setError: (v) => set({ error: v }),
   _setEvents: (events) => set({ events }),
-  _setAgentStates: (states) => set({ agentStates: states }),
   _setCharacters: (chars) => set({ characters: chars }),
   _bumpCharactersVersion: () => set(s => ({ charactersVersion: s.charactersVersion + 1 })),
   _setActiveTheme: (theme) => set({ activeTheme: theme }),
@@ -77,7 +81,7 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
         const updated = [...events];
         updated[idx] = newEvent;
         set({ events: updated });
-        return;
+        return; // 인플레이스 업데이트는 소리 없음
       }
     }
     let updated = [...events, newEvent];
@@ -85,6 +89,42 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
       updated = updated.slice(updated.length - MAX_EVENTS + 10);
     }
     set({ events: updated });
+
+    // React 렌더링 사이클 밖에서 직접 트리거 → 배칭 영향 없음
+    const { isMuted, playSound } = sound();
+    if (!isMuted) {
+      playSound(newEvent.hook_event_type === 'SessionStart' ? 'session_start' : 'log_tick');
+    }
+  },
+
+  _setAgentStates: (states) => {
+    const prev = get().agentStates;
+    set({ agentStates: states });
+
+    const { isMuted, playSound } = sound();
+    if (isMuted) return;
+
+    const isInitialLoad = Object.keys(prev).length === 0;
+
+    for (const [key, agent] of Object.entries(states)) {
+      if (agent.isSubagent) continue;
+      const prevAgent = prev[key];
+
+      if (!prevAgent) {
+        if (!isInitialLoad) playSound('agent_appear');
+        continue;
+      }
+      if (agent.status === prevAgent.status) continue;
+
+      if (agent.status === 'DONE') playSound('done');
+      else if (agent.status === 'ERROR') playSound('error');
+      else if (agent.status === 'BLOCKED') playSound('blocked');
+      else if (agent.status === 'WORKING') {
+        const ps = prevAgent.status;
+        if (ps === 'WAITING' || ps === 'OFFLINE' || ps === 'DONE') playSound('reentry');
+        else if (ps !== 'ORCHESTRATING') playSound('work_start');
+      }
+    }
   },
 }));
 
@@ -125,8 +165,8 @@ export function useWebSocketConnection(url: string) {
             } else if (message.type === 'characters_updated') {
               s._bumpCharactersVersion();
             } else if (message.type === 'theme_activated') {
-              const d = message.data as unknown as ActiveTheme;
-              s._setActiveTheme({ id: d.id, lightColors: d.lightColors, darkColors: d.darkColors });
+              const d = message.data as any;
+              s._setActiveTheme({ id: d.themeId ?? d.id, lightColors: d.lightColors, darkColors: d.darkColors });
             }
           } catch (err) {
             console.error('Failed to parse WebSocket message:', err);

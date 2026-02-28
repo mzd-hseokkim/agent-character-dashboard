@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Moon, RefreshCw, Zap, MessageSquare } from 'lucide-react';
+import { Moon, RefreshCw, Zap, MessageSquare, Hand } from 'lucide-react';
 import { CSSTransition } from 'react-transition-group';
 import { SpriteCanvas } from '../SpriteCanvas';
 import { CelebrationOverlay } from './CelebrationOverlay';
@@ -212,7 +212,7 @@ export function AgentCard({ agentKey, agent, events, tick, celebrating, onCycleC
             unmountOnExit
             nodeRef={hitlHandRef}
           >
-            <div ref={hitlHandRef} className="char-hitl-hand">🙋</div>
+            <div ref={hitlHandRef} className="char-hitl-hand"><Hand size={18} /></div>
           </CSSTransition>
         </div>
       </div>

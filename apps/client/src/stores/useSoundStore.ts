@@ -207,19 +207,10 @@ function tryResume(): void {
 }
 
 if (typeof window !== 'undefined') {
-  // 첫 클릭 시 AudioContext 생성 + resume (autoplay 정책 해제)
-  document.addEventListener('pointerdown', () => {
-    if (!ctx) {
-      ctx = new AudioContext();
-      attachCtxListeners(ctx);
-    }
-    // resume 완료 후 pending 처리 (autoplay 차단 상태에서 첫 클릭으로 해제되는 경우)
-    ctx.resume().then(() => {
-      const ev = pendingEvent;
-      pendingEvent = null;
-      if (ev && ctx) try { playBuffered(ctx, ev); } catch {}
-    }).catch(() => {});
-  }, { once: true });
+  // 앱 로드 즉시 AudioContext 생성 + resume 시도 (autoplay 허용 환경에서 바로 동작)
+  ctx = new AudioContext();
+  attachCtxListeners(ctx);
+  ctx.resume().catch(() => {});
 
   // 탭 visible 복귀 시 resume
   document.addEventListener('visibilitychange', () => {
@@ -228,6 +219,9 @@ if (typeof window !== 'undefined') {
 
   // window focus 복귀 시 resume (다른 앱에서 돌아올 때)
   window.addEventListener('focus', tryResume);
+
+  // 여전히 suspended 상태일 경우 첫 클릭으로 해제
+  document.addEventListener('pointerdown', tryResume, { once: true });
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { initDatabase, insertEvent, getFilterOptions, getRecentEvents, getEventById, updateEventHITLResponse, db, getAllCharacters, getThemeCharacters, getCharacterSprites, getTheme } from './db';
+import { initDatabase, insertEvent, getFilterOptions, getRecentEvents, getEventById, updateEventHITLResponse, db, getAllCharacters, getThemeCharacters, getCharacterSprites, getTheme, deleteThemeCharacterById, getAppSetting, setAppSetting } from './db';
 import type { HookEvent, HumanInTheLoopResponse } from './types';
 import {
   createTheme,
@@ -10,7 +10,7 @@ import {
   importTheme,
   getThemeStats
 } from './theme';
-import { handleThemeUpload } from './upload';
+import { handleThemeUpload, handleAddThemeCharacter, deleteThemeCharacterFiles } from './upload';
 
 // Initialize database
 initDatabase();
@@ -18,8 +18,8 @@ initDatabase();
 // Store WebSocket clients
 const wsClients = new Set<any>();
 
-// Active theme (in-memory)
-let activeThemeId: string | null = null;
+// Active theme — persisted in DB, loaded on startup
+let activeThemeId: string | null = getAppSetting('activeThemeId');
 
 // ─── Agent State Management ───────────────────────────────────────────────────
 
@@ -577,6 +577,7 @@ const server = Bun.serve({
       }
 
       activeThemeId = themeId;
+      setAppSetting('activeThemeId', themeId);
 
       // 해당 테마의 캐릭터 목록 로드
       const themeChars = getThemeCharacters(themeId);
@@ -614,10 +615,9 @@ const server = Bun.serve({
       return res;
     }
 
-    // GET /api/characters - All registered characters (across all themes)
+    // GET /api/characters - Characters from active theme only (empty if no active theme)
     if (url.pathname === '/api/characters' && req.method === 'GET') {
-      const characters = getAllCharacters();
-      // Attach sprites to each character
+      const characters = activeThemeId ? getThemeCharacters(activeThemeId) : [];
       const result = characters.map(char => ({
         ...char,
         sprites: Object.fromEntries(
@@ -642,6 +642,31 @@ const server = Bun.serve({
       return new Response(JSON.stringify({ success: true, data: result }), {
         headers: { ...headers, 'Content-Type': 'application/json' },
       });
+    }
+
+    // POST /api/themes/:id/characters - Add character to existing theme
+    if (url.pathname.match(/^\/api\/themes\/[^/]+\/characters$/) && req.method === 'POST') {
+      const themeId = url.pathname.split('/')[3];
+      const theme = getTheme(themeId);
+      if (!theme) {
+        return new Response(JSON.stringify({ success: false, error: 'Theme not found' }), { status: 404, headers });
+      }
+      const res = await handleAddThemeCharacter(req, themeId);
+      if (res.status === 201) broadcastCharactersUpdated();
+      return res;
+    }
+
+    // DELETE /api/themes/:id/characters/:charId - Delete a character from a theme
+    if (url.pathname.match(/^\/api\/themes\/[^/]+\/characters\/[^/]+$/) && req.method === 'DELETE') {
+      const parts = url.pathname.split('/');
+      const charDbId = parts[5];
+      const deletedChar = deleteThemeCharacterById(charDbId);
+      if (!deletedChar) {
+        return new Response(JSON.stringify({ success: false, error: 'Character not found' }), { status: 404, headers });
+      }
+      await deleteThemeCharacterFiles(deletedChar.themeId, deletedChar.characterId);
+      broadcastCharactersUpdated();
+      return new Response(JSON.stringify({ success: true }), { headers });
     }
 
     // POST /api/themes - Create a new theme
@@ -722,7 +747,15 @@ const server = Bun.serve({
       try {
         const updates = await req.json();
         const result = await updateThemeById(id, updates);
-        
+
+        // 활성 테마가 수정된 경우 색상 변경 즉시 브로드캐스트
+        if (result.success && activeThemeId === id) {
+          const updatedTheme = getTheme(id);
+          if (updatedTheme?.lightColors && updatedTheme?.darkColors) {
+            broadcastThemeActivated(id, updatedTheme.lightColors, updatedTheme.darkColors);
+          }
+        }
+
         const status = result.success ? 200 : 400;
         return new Response(JSON.stringify(result), {
           status,
@@ -730,9 +763,9 @@ const server = Bun.serve({
         });
       } catch (error) {
         console.error('Error updating theme:', error);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Invalid request body' 
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Invalid request body'
         }), {
           status: 400,
           headers: { ...headers, 'Content-Type': 'application/json' }
@@ -756,7 +789,14 @@ const server = Bun.serve({
       const authorId = url.searchParams.get('authorId');
       const result = await deleteThemeById(id, authorId || undefined);
 
-      if (result.success) broadcastCharactersUpdated();
+      if (result.success) {
+        broadcastCharactersUpdated();
+        // 활성 테마가 삭제된 경우 DB에서도 초기화
+        if (activeThemeId === id) {
+          activeThemeId = null;
+          setAppSetting('activeThemeId', null);
+        }
+      }
 
       const status = result.success ? 200 : (result.error?.includes('not found') ? 404 : 403);
       return new Response(JSON.stringify(result), {

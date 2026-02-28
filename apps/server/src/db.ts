@@ -172,6 +172,14 @@ export function initDatabase(): void {
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_theme_characters_themeId ON theme_characters(themeId)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_character_sprites_characterId ON character_sprites(characterId)');
+
+  // App settings table (key-value store for persistent server state)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
 }
 
 export function insertEvent(event: HookEvent): HookEvent {
@@ -277,30 +285,23 @@ export function insertTheme(theme: Theme): Theme {
   return theme;
 }
 
-export function updateTheme(id: string, updates: Partial<Theme>): boolean {
-  const allowedFields = ['displayName', 'description', 'colors', 'isPublic', 'updatedAt', 'tags'];
-  const setClause = Object.keys(updates)
-    .filter(key => allowedFields.includes(key))
-    .map(key => `${key} = ?`)
-    .join(', ');
-  
-  if (!setClause) return false;
-  
-  const values = Object.keys(updates)
-    .filter(key => allowedFields.includes(key))
-    .map(key => {
-      if (key === 'colors' || key === 'tags') {
-        return JSON.stringify(updates[key as keyof Theme]);
-      }
-      if (key === 'isPublic') {
-        return updates[key as keyof Theme] ? 1 : 0;
-      }
-      return updates[key as keyof Theme];
-    });
-  
-  const stmt = db.prepare(`UPDATE themes SET ${setClause} WHERE id = ?`);
+export function updateTheme(id: string, updates: Partial<Theme> & { updatedAt?: number }): boolean {
+  const setClauses: string[] = [];
+  const values: any[] = [];
+
+  if (updates.displayName !== undefined) { setClauses.push('displayName = ?'); values.push(updates.displayName); }
+  if (updates.description !== undefined) { setClauses.push('description = ?'); values.push(updates.description || null); }
+  if (updates.isPublic !== undefined) { setClauses.push('isPublic = ?'); values.push(updates.isPublic ? 1 : 0); }
+  if (updates.tags !== undefined) { setClauses.push('tags = ?'); values.push(JSON.stringify(updates.tags)); }
+  if (updates.colors !== undefined) { setClauses.push('colors = ?'); values.push(JSON.stringify(updates.colors)); }
+  if (updates.lightColors !== undefined) { setClauses.push('light_colors = ?'); values.push(JSON.stringify(updates.lightColors)); }
+  if (updates.darkColors !== undefined) { setClauses.push('dark_colors = ?'); values.push(JSON.stringify(updates.darkColors)); }
+  if (updates.updatedAt !== undefined) { setClauses.push('updatedAt = ?'); values.push(updates.updatedAt); }
+
+  if (setClauses.length === 0) return false;
+
+  const stmt = db.prepare(`UPDATE themes SET ${setClauses.join(', ')} WHERE id = ?`);
   const result = stmt.run(...values, id);
-  
   return result.changes > 0;
 }
 
@@ -492,6 +493,13 @@ export function deleteThemeCharacter(id: string): boolean {
   return db.prepare('DELETE FROM theme_characters WHERE id = ?').run(id).changes > 0;
 }
 
+export function deleteThemeCharacterById(charRowId: string): ThemeCharacter | null {
+  const row = db.prepare('SELECT * FROM theme_characters WHERE id = ?').get(charRowId) as any;
+  if (!row) return null;
+  db.prepare('DELETE FROM theme_characters WHERE id = ?').run(charRowId);
+  return rowToThemeCharacter(row);
+}
+
 function rowToThemeCharacter(row: any): ThemeCharacter {
   return {
     id: row.id,
@@ -533,6 +541,20 @@ function rowToCharacterSprite(row: any): CharacterSprite {
     mimeType: row.mimeType || 'image/gif',
     createdAt: row.createdAt,
   };
+}
+
+// App settings helpers
+export function getAppSetting(key: string): string | null {
+  const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as any;
+  return row ? row.value : null;
+}
+
+export function setAppSetting(key: string, value: string | null): void {
+  if (value === null) {
+    db.prepare('DELETE FROM app_settings WHERE key = ?').run(key);
+  } else {
+    db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+  }
 }
 
 export { db };

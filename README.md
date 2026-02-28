@@ -242,12 +242,19 @@ bun dev
 - **에이전트 카드**: 캐릭터 스프라이트, 상태 뱃지, APM(분당 액션 수), 마지막 업데이트 시각
 - **피드**: 최근 툴 이벤트 목록 (마우스 오버 시 상세 툴팁)
 - **캐릭터 순환**: 캐릭터 클릭 시 다음 캐릭터로 변경
+- **카드 뷰 / 상세 뷰 전환**: 헤더 버튼으로 레이아웃 토글
 
 ### 이벤트 탭 (타임라인)
 
 - **Party Events 타임라인**: 모든 에이전트의 훅 이벤트를 최신순으로 표시, 정규식 검색 지원
 - **LivePulseChart**: 실시간 활동 차트
 - **SwimLane**: 에이전트별 이벤트 레인
+
+### 테마 관리
+
+- **다크/라이트 모드 토글**: 헤더 Sun/Moon 버튼
+- **테마 매니저**: 헤더 팔레트 버튼 → 테마 목록, 신규 테마 업로드, 활성 테마 전환
+- **테마 패키지 업로드**: 테마 메타데이터 + 라이트/다크 색상 팔레트 + 캐릭터 GIF 일괄 등록
 
 ---
 
@@ -261,7 +268,7 @@ bun dev
 | himmel | GIF | `public/sprites/himmel/` |
 | char_a ~ char_e | Canvas 픽셀아트 | (코드 내 생성) |
 
-GIF 파일명 규칙: `{CHARNAME}_{STATUS}.gif`
+GIF 파일명 규칙: `{CHARNAME_대문자}_{STATUS}.gif`
 
 상태 매핑:
 
@@ -274,13 +281,26 @@ GIF 파일명 규칙: `{CHARNAME}_{STATUS}.gif`
 | DONE | FINISH |
 | ERROR, OFFLINE | OFFLINE |
 
+> **참고:** FORCE(WORKING) 파일만 필수이며, 나머지 상태 파일이 없으면 FORCE GIF로 대체된다.
+
 ---
 
 ## 새 캐릭터 GIF 추가하기
 
-### 1. GIF 파일 배치
+캐릭터 추가는 **테마 패키지 업로드 UI**를 통해 진행한다. 코드 수정 없이 동적으로 등록된다.
 
-`apps/client/public/sprites/{캐릭터ID}/` 디렉토리를 만들고 아래 6개 파일을 넣는다.
+### 테마 업로드 UI 사용법
+
+1. 헤더의 팔레트(🎨) 버튼 → 테마 매니저 열기
+2. "새 테마 추가" 버튼 클릭
+3. 테마 이름/설명 입력
+4. 라이트/다크 색상 팔레트 지정
+5. 캐릭터 섹션에서 캐릭터 ID와 이름을 입력하고 GIF 파일 업로드
+6. 저장 후 "활성화" 버튼으로 테마 적용
+
+### 수동으로 GIF 파일 배치 (내장 캐릭터용)
+
+내장 캐릭터(`frieren`, `fern`, `stark`, `himmel`)는 클라이언트 `public` 디렉토리에 파일을 직접 넣어도 된다.
 
 파일명 규칙: `{CHARNAME_대문자}_{STATUS}.gif`
 
@@ -288,7 +308,7 @@ GIF 파일명 규칙: `{CHARNAME}_{STATUS}.gif`
 
 ```
 apps/client/public/sprites/himmel/
-├── HIMMEL_FORCE.gif     # WORKING / ORCHESTRATING 상태
+├── HIMMEL_FORCE.gif     # WORKING / ORCHESTRATING 상태 (필수)
 ├── HIMMEL_THINK.gif     # THINKING 상태
 ├── HIMMEL_READING.gif   # READING 상태
 ├── HIMMEL_REST.gif      # WAITING / BLOCKED 상태
@@ -296,33 +316,30 @@ apps/client/public/sprites/himmel/
 └── HIMMEL_OFFLINE.gif   # ERROR / OFFLINE 상태
 ```
 
-### 2. 클라이언트 등록
+---
 
-`apps/client/src/components/SpriteCanvas.tsx`의 `GIF_CHARS`에 추가한다.
+## 테마 관리 시스템
 
-```ts
-const GIF_CHARS: Record<string, string> = {
-  frieren: 'FRIEREN',
-  fern: 'FERN',
-  stark: 'STARK',
-  himmel: 'HIMMEL',
-  // 새 캐릭터: 'ID': 'CHARNAME_대문자'
-}
-```
+### 개요
 
-### 3. 서버 등록
+테마 패키지는 **색상 팔레트 + 캐릭터 GIF** 묶음이다. 한 번에 하나의 테마가 활성화되며, 활성 테마의 캐릭터가 에이전트에 자동 배정된다.
 
-`apps/server/src/index.ts`의 두 배열에 캐릭터 ID를 추가한다.
+### 서버 API
 
-```ts
-// 에이전트 자동 배정 풀 (새 세션에 순환 배정)
-const DEFAULT_CHARACTER_IDS = ['frieren', 'fern', 'stark', 'himmel'];
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/themes` | 테마 목록 조회 |
+| POST | `/api/themes/upload` | 테마 패키지 업로드 (multipart) |
+| POST | `/api/themes/:id/activate` | 테마 활성화 |
+| DELETE | `/api/themes/:id` | 테마 삭제 |
+| GET | `/api/characters` | 현재 활성 캐릭터 목록 |
+| GET | `/api/themes/:id/characters` | 특정 테마의 캐릭터 목록 |
 
-// 카드 클릭 시 순환할 전체 목록
-const CHARACTER_IDS = ['frieren', 'fern', 'stark', 'himmel', 'char_a', ...];
-```
+업로드된 GIF 파일은 `./uploads/sprites/{themeId}/{charId}/` 에 저장되고 `/uploads/` 경로로 정적 서빙된다.
 
-변경 후 서버를 재시작하면 새 캐릭터가 배정에 포함된다.
+### 색상 변수
+
+테마는 라이트/다크 두 벌의 색상 팔레트를 가진다. 활성화 시 CSS 변수(`--theme-*`)로 적용된다.
 
 ---
 
@@ -355,22 +372,25 @@ export DASHBOARD_SERVER_URL=http://your-server:4000
 agent-character-dashboard/
 ├── .claude/
 │   └── hooks/
-│       └── send_event.py          # Claude Code → 서버 이벤트 전송 훅
+│       └── send_event.py              # Claude Code → 서버 이벤트 전송 훅
 ├── apps/
 │   ├── server/
 │   │   └── src/
-│   │       ├── index.ts           # Bun 서버 (HTTP + WebSocket + 에이전트 상태 관리)
-│   │       ├── db.ts              # SQLite (bun:sqlite) 이벤트 저장소
-│   │       └── theme.ts           # 테마 관리
-│   ├── client/                    # React 19 + Vite 클라이언트 (메인)
+│   │       ├── index.ts               # Bun 서버 (HTTP + WebSocket + 에이전트 상태 관리)
+│   │       ├── db.ts                  # SQLite (bun:sqlite) 이벤트/테마/캐릭터 저장소
+│   │       ├── types.ts               # 공유 타입 (Theme, ThemeCharacter, CharacterSprite 등)
+│   │       ├── theme.ts               # 테마 CRUD 로직
+│   │       └── upload.ts              # 테마 패키지 업로드 핸들러 (multipart, GIF 검증)
+│   ├── client/                        # React 19 + Vite 클라이언트 (메인)
 │   │   └── src/
-│   │       ├── App.tsx            # 메인 레이아웃 (탭 UI)
-│   │       ├── config.ts          # API/WebSocket URL 설정
-│   │       ├── stores/            # Zustand 스토어
-│   │       │   ├── useWebSocketStore.ts
-│   │       │   ├── useThemeStore.ts
-│   │       │   └── useSoundStore.ts
-│   │       ├── hooks/             # React 커스텀 훅
+│   │       ├── App.tsx                # 메인 레이아웃 (탭 UI)
+│   │       ├── config.ts              # API/WebSocket URL 설정
+│   │       ├── stores/                # Zustand 스토어
+│   │       │   ├── useWebSocketStore.ts  # 에이전트 상태, 이벤트, 캐릭터 목록
+│   │       │   ├── useThemeStore.ts      # 테마/색상/다크모드 상태
+│   │       │   └── useSoundStore.ts      # 사운드 설정
+│   │       ├── hooks/                 # React 커스텀 훅
+│   │       │   ├── useCharacters.ts      # 동적 캐릭터 로딩 (DB → 내장 → null 폴백)
 │   │       │   ├── useEventColors.ts
 │   │       │   ├── useEventSearch.ts
 │   │       │   └── ...
@@ -381,12 +401,16 @@ agent-character-dashboard/
 │   │           │   ├── AgentCard.tsx        # 캐릭터 카드 (스프라이트, 상태, APM)
 │   │           │   ├── FeedItem.tsx         # 피드 이벤트 행
 │   │           │   └── FeedTooltip.tsx      # 툴팁 포탈
-│   │           ├── SpriteCanvas.tsx         # 캐릭터 렌더링 (GIF/Canvas)
+│   │           ├── SpriteCanvas.tsx         # 캐릭터 렌더링 (GIF/Canvas 픽셀아트)
+│   │           ├── ThemeManager.tsx         # 테마 목록/활성화 UI
+│   │           ├── ThemePackageUpload.tsx   # 테마 패키지 업로드 UI
+│   │           ├── ThemePreview.tsx         # 테마 색상 미리보기
 │   │           ├── EventTimeline.tsx        # 이벤트 스트림
 │   │           ├── LivePulseChart.tsx       # 실시간 활동 차트
 │   │           ├── HitlOverlay.tsx          # HITL 인터랙션 오버레이
 │   │           └── ...
-│└── README.md
+│   └── client-vue/                    # Vue 3 클라이언트 (아카이브)
+└── README.md
 ```
 
 ---
@@ -412,3 +436,9 @@ agent-character-dashboard/
 ### WebSocket 연결 끊김
 
 클라이언트는 3초마다 자동 재연결을 시도한다. 서버가 실행 중이면 자동으로 복구된다.
+
+### 테마 업로드 실패 시
+
+- GIF 파일 형식 검증: 파일 magic bytes(`GIF87a` / `GIF89a`)가 올바른지 확인
+- 파일 크기 제한: 개별 GIF 파일은 10MB 이하 권장
+- `./uploads/` 디렉토리 쓰기 권한 확인 (`apps/server/uploads/`)

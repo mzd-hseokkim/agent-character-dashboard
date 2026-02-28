@@ -1,7 +1,7 @@
 /* ── Header ─────────────────────────────────────────── */
 .frieren-header {
-  background: #090d09;
-  border-bottom: 1px solid #1c2820;
+  background: var(--theme-bg-secondary);
+  border-bottom: 1px solid var(--theme-border-primary);
   flex-shrink: 0;
 }
 .header-inner {
@@ -12,11 +12,11 @@
 }
 .header-accent-bar {
   width: 2px; height: 22px; border-radius: 2px;
-  background: linear-gradient(to bottom, #3a8020, #6ab840);
+  background: linear-gradient(to bottom, var(--theme-primary), var(--theme-accent-success));
 }
 .header-title {
   font-size: 14px; font-weight: 600; letter-spacing: 0.05em;
-  color: #8aa888; white-space: nowrap;
+  color: var(--theme-text-secondary); white-space: nowrap;
 }
 .tab-group { display: flex; gap: 3px; }
 @media (max-width: 699px) { .header-tabs { display: none; } }
@@ -26,27 +26,27 @@
   font-size: 12px; font-weight: 500;
   transition: all 0.15s; cursor: pointer;
   border: 1px solid transparent;
-  color: #3a5038; background: transparent;
+  color: var(--theme-text-quaternary); background: transparent;
 }
-.tab-active  { background: #141e14; color: #8aa888; border-color: #243022; }
-.tab-inactive:hover { color: #6a8868; background: #0f1610; }
-.header-text-dim { color: #3a5038; font-size: 11px; }
+.tab-active  { background: var(--theme-bg-tertiary); color: var(--theme-text-secondary); border-color: var(--theme-border-primary); }
+.tab-inactive:hover { color: var(--theme-text-tertiary); background: var(--theme-bg-tertiary); }
+.header-text-dim { color: var(--theme-text-quaternary); font-size: 11px; }
 .header-count {
   font-size: 10px; font-family: monospace;
-  color: #4a6848; background: #0f1610;
-  border: 1px solid #1c2820;
+  color: var(--theme-text-tertiary); background: var(--theme-bg-tertiary);
+  border: 1px solid var(--theme-border-primary);
   padding: 3px 10px; border-radius: 20px;
 }
 .header-btn {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: 6px;
-  color: #3a5038; border: 1px solid #1c2820;
+  color: var(--theme-text-quaternary); border: 1px solid var(--theme-border-primary);
   transition: all 0.15s; cursor: pointer; background: transparent;
   padding: 0;
 }
-.header-btn:hover { color: #8aa888; background: #141e14; border-color: #2a3828; }
-.header-btn-muted { color: #2a3028; }
-.header-sep { width: 1px; height: 16px; background: #1c2820; flex-shrink: 0; }
+.header-btn:hover { color: var(--theme-text-secondary); background: var(--theme-bg-tertiary); border-color: var(--theme-border-secondary); }
+.header-btn-muted { color: var(--theme-text-quaternary); opacity: 0.5; }
+.header-sep { width: 1px; height: 16px; background: var(--theme-border-primary); flex-shrink: 0; }
 
 
 /* ── Tab pane ─────────────────────────────────────── */
@@ -69,32 +69,4 @@
 .tab-switch-exit-active  { opacity: 0; transition: opacity 0.12s ease; }
 
 /* ── App root background ─────────────────────────── */
-.app-root { background: #0d1117; }
-
-/* ══ Light mode overrides (Header / Nav) ════════════ */
-/*
-  Light mode palette — "Paper Forest"
-  bg:     #eef2ea / #e4ebe0 / #dce4d6
-  border: #c2d0bc / #b4c4ae
-  text:   #1c2c18 / #2e4228 / #4a6040 / #7a9070 / #9aaa90
-*/
-.theme-light .app-root           { background: #eef2ea; }
-.theme-light .frieren-header     { background: #e4ebe0; border-bottom-color: #c2d0bc; }
-.theme-light .header-accent-bar  { background: linear-gradient(to bottom, #3a8020, #5a9830); }
-.theme-light .header-title       { color: #2e4228; }
-
-.theme-light .tab-btn            { color: #7a9070; background: transparent; border-color: transparent; }
-.theme-light .tab-active         { background: #d4e0ce; color: #2e4228; border-color: #b4c4ae; }
-.theme-light .tab-inactive:hover { color: #4a6040; background: #dce8d6; }
-
-.theme-light .header-count       { color: #4a6040; background: #dce8d6; border-color: #c2d0bc; }
-
-.theme-light .header-btn         { color: #7a9070; border-color: #c2d0bc; background: transparent; }
-.theme-light .header-btn:hover   { color: #2e4228; background: #d4e0ce; border-color: #b4c4ae; }
-.theme-light .header-btn-muted   { color: #b4c4ae; }
-.theme-light .header-sep         { background: #c2d0bc; }
-
-.theme-light .view-mode-toggle   { background: #e4ebe0; border-color: #c2d0bc; }
-.theme-light .view-mode-btn      { color: #7a9070; }
-.theme-light .view-mode-btn:hover{ color: #4a6040; background: #dce8d6; }
-.theme-light .view-mode-btn.active{ background: #d0deca; color: #2e4228; }
+.app-root { background: var(--theme-bg-primary); }

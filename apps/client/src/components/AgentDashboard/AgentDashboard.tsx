@@ -1,6 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, createRef } from 'react';
 import { TransitionGroup, CSSTransition } from 'react-transition-group';
-import { useSoundStore } from '../../stores/useSoundStore';
 import { AgentColumn } from './AgentColumn';
 import { FeedTooltip } from './FeedTooltip';
 import type { TipState } from './FeedTooltip';
@@ -20,7 +19,6 @@ interface Props {
 const TOOLTIP_W = 320;
 
 export function AgentDashboard({ agentStates, events, viewMode }: Props) {
-  const { playSound } = useSoundStore();
   const [tick, setTick] = useState(0);
   const [celebratingKeys, setCelebratingKeys] = useState(new Set<string>());
   const [tip, setTip] = useState<TipState>({ visible: false, x: 0, y: 0, ev: null });
@@ -33,9 +31,7 @@ export function AgentDashboard({ agentStates, events, viewMode }: Props) {
     }
     return colRefsRef.current.get(key)!;
   };
-  const prevEventsLengthRef = useRef(0);
-  const prevAgentKeysRef = useRef<string[]>([]);
-  const prevStatusesRef = useRef(new Map<string, string>());
+  const prevStatusRef = useRef(new Map<string, string>());
   const prevPositionsRef = useRef(new Map<string, { x: number; y: number }>());
 
   // Tick timer + cleanup
@@ -58,38 +54,13 @@ export function AgentDashboard({ agentStates, events, viewMode }: Props) {
   const mainAgentKeyStr = mainAgents.map(([k]) => k).join(',');
   const mainAgentStatusStr = mainAgents.map(([k, a]) => `${k}:${a.status}`).join(',');
 
-  // Watch events length → play sound on every new log event
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const prev = prevEventsLengthRef.current;
-    prevEventsLengthRef.current = events.length;
-    if (!prev || events.length <= prev) return;
-    const newEv = events[events.length - 1];
-    if (newEv?.hook_event_type === 'SessionStart') {
-      playSound('session_start');
-    } else {
-      playSound('log_tick');
-    }
-  }, [events.length]);
-
-  // Watch mainAgent keys → detect new agent appearance
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const prev = prevAgentKeysRef.current;
-    const next = mainAgents.map(([k]) => k);
-    prevAgentKeysRef.current = next;
-    if (!prev.length) return;
-    const prevSet = new Set(prev);
-    next.forEach(k => { if (!prevSet.has(k)) playSound('agent_appear'); });
-  }, [mainAgentKeyStr]);
-
-  // Watch mainAgent statuses → celebration + sounds
+  // Watch mainAgent statuses → celebration (DONE 축하 애니메이션만)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const next = new Map(mainAgents.map(([k, a]) => [k, a.status] as [string, AgentStatus]));
     for (const [key, status] of next) {
-      const prevStatus = prevStatusesRef.current.get(key);
-      if (!prevStatus) { prevStatusesRef.current.set(key, status); continue; }
+      const prevStatus = prevStatusRef.current.get(key);
+      if (!prevStatus) { prevStatusRef.current.set(key, status); continue; }
       if (status === prevStatus) continue;
 
       if (status === 'DONE') {
@@ -99,19 +70,10 @@ export function AgentDashboard({ agentStates, events, viewMode }: Props) {
         celebrateTimersRef.current.set(key, setTimeout(() => {
           setCelebratingKeys(s => { const ns = new Set(s); ns.delete(key); return ns; });
         }, 3500));
-        playSound('done');
-      } else if (status === 'ERROR') {
-        playSound('error');
-      } else if (status === 'BLOCKED') {
-        playSound('blocked');
-      } else if (status === 'WORKING') {
-        const fromIdle = prevStatus === 'WAITING' || prevStatus === 'OFFLINE' || prevStatus === 'DONE';
-        if (fromIdle) playSound('reentry');
-        else if (prevStatus !== 'ORCHESTRATING') playSound('work_start');
       }
-      prevStatusesRef.current.set(key, status);
+      prevStatusRef.current.set(key, status);
     }
-    prevStatusesRef.current = next;
+    prevStatusRef.current = next;
   }, [mainAgentStatusStr]);
 
   // FLIP animation for card view reordering
