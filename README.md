@@ -4,6 +4,8 @@ Claude Code 에이전트를 도트 캐릭터로 시각화하는 실시간 멀티
 
 각 Claude Code 세션이 고유한 캐릭터로 표시되며, 툴 사용/생각 중/완료 등 상태가 애니메이션으로 변한다.
 
+![Agent Character Dashboard screenshot](docs/screenshot.png)
+
 ---
 
 ## 동작 원리
