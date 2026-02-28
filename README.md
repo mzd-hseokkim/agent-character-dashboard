@@ -183,6 +183,17 @@ bun run dev
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /path/to/agent-character-dashboard/.claude/hooks/send_event.py SessionStart",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
@@ -434,7 +445,7 @@ agent-character-dashboard/
 2. **훅 경로 확인**: `~/.claude/settings.json`의 `send_event.py` 경로가 실제 파일 위치와 일치하는지 확인
 3. **python 명령 확인**: 터미널에서 `python3 --version`(macOS/Linux) 또는 `python --version`(Windows)으로 Python 3이 설치되어 있는지 확인한다. 훅 커맨드의 `python3` / `python`이 실제 실행 가능한 명령과 일치해야 한다.
 4. **방화벽 확인**: `localhost:4000` 포트 접근 차단 여부 확인
-5. **isSubagent 오분류**: 서버 재시작 후 오래된 세션이 서브에이전트로 분류될 수 있음. `http://localhost:4000/agents`에서 `isSubagent` 값 확인
+5. **isSubagent 오분류**: 서버 재시작 후 이미 진행 중인 세션에서 `PreToolUse`가 `UserPromptSubmit`보다 먼저 도착하면 서브에이전트로 오분류될 수 있음. `SessionStart` 훅이 등록되어 있으면 이 문제를 방지할 수 있다. `http://localhost:4000/agents`에서 `isSubagent` 값 확인
 
 ### 한글이 깨질 때
 
