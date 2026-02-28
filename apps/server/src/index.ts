@@ -888,8 +888,13 @@ const server = Bun.serve({
     },
     
     message(ws, message) {
-      // Handle any client messages if needed
-      console.log('Received message:', message);
+      try {
+        const data = JSON.parse(message as string);
+        if (data?.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+      } catch { /* 파싱 불가 메시지는 무시 */ }
     },
     
     close(ws) {
