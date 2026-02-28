@@ -107,7 +107,19 @@ function agentHasHitlPending(agentKey: string, agent: AgentState, events: HookEv
   const agentEvs = [...events]
     .filter(e => e.source_app === app && e.session_id.startsWith(sess))
     .reverse(); // newest first
-  return agentEvs.length > 0 && !!(agentEvs[0].humanInTheLoop && agentEvs[0].humanInTheLoopStatus?.status === 'pending');
+  // 가장 최근 HITL 이벤트를 찾아 pending 여부 확인
+  const latestHitlIdx = agentEvs.findIndex(e => e.humanInTheLoop !== undefined);
+  if (latestHitlIdx === -1) return false;
+  const latestHitl = agentEvs[latestHitlIdx];
+  // 서버에서 responded로 업데이트된 경우
+  if (latestHitl.humanInTheLoopStatus?.status !== 'pending') return false;
+  // 해당 HITL보다 더 최신 이벤트들
+  const newerEvs = agentEvs.slice(0, latestHitlIdx);
+  // 새 사용자 메시지가 왔으면 → 이미 응답됨
+  if (newerEvs.some(e => e.hook_event_type === 'UserPromptSubmit')) return false;
+  // PostToolUse가 왔으면 → 에이전트가 도구를 실행했다 = HITL이 이미 승인됨
+  if (newerEvs.some(e => e.hook_event_type === 'PostToolUse')) return false;
+  return true;
 }
 
 interface Props {
