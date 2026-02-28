@@ -93,7 +93,11 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
     // React 렌더링 사이클 밖에서 직접 트리거 → 배칭 영향 없음
     const { isMuted, playSound } = sound();
     if (!isMuted) {
-      playSound(newEvent.hook_event_type === 'SessionStart' ? 'session_start' : 'log_tick');
+      if (newEvent.humanInTheLoop && newEvent.humanInTheLoopStatus?.status === 'pending') {
+        playSound('hitl_request');
+      } else {
+        playSound(newEvent.hook_event_type === 'SessionStart' ? 'session_start' : 'log_tick');
+      }
     }
   },
 
