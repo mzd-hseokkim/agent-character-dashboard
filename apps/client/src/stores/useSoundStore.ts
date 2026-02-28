@@ -235,7 +235,7 @@ interface SoundStore {
 }
 
 export const useSoundStore = create<SoundStore>((set, get) => ({
-  isMuted: localStorage.getItem(MUTE_KEY) === 'true',
+  isMuted: localStorage.getItem(MUTE_KEY) !== 'false',
 
   toggleMute: () => {
     const next = !get().isMuted;

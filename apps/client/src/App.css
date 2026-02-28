@@ -45,7 +45,15 @@
   padding: 0;
 }
 .header-btn:hover { color: var(--theme-text-secondary); background: var(--theme-bg-tertiary); border-color: var(--theme-border-secondary); }
-.header-btn-muted { color: var(--theme-text-quaternary); opacity: 0.5; }
+.header-btn-muted {
+  color: var(--theme-accent-warning, #f59e0b);
+  border-color: var(--theme-accent-warning, #f59e0b);
+  animation: mute-glow 2s ease-in-out infinite;
+}
+@keyframes mute-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.35); }
+  50%       { box-shadow: 0 0 10px rgba(245, 158, 11, 0.75), 0 0 22px rgba(245, 158, 11, 0.25); }
+}
 .header-sep { width: 1px; height: 16px; background: var(--theme-border-primary); flex-shrink: 0; }
 
 
