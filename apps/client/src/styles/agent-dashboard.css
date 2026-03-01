@@ -247,6 +247,16 @@
   pointer-events: none;
 }
 
+/* ── 기존 카드 재정렬용: enter 애니메이션 없음, exit만 동일하게 ── */
+.agent-col-no-enter-enter { }
+.agent-col-no-enter-enter-active { }
+.agent-col-no-enter-exit { opacity: 1; }
+.agent-col-no-enter-exit-active {
+  animation: agent-col-exit 0.58s ease-in forwards;
+  transform-origin: center center;
+  pointer-events: none;
+}
+
 /* ── Current action ── */
 .card-action {
   width: 100%; display: flex; align-items: flex-start; gap: 6px;

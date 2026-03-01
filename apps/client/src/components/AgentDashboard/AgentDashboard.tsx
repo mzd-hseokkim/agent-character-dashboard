@@ -21,10 +21,12 @@ const TOOLTIP_W = 320;
 export function AgentDashboard({ agentStates, events, viewMode }: Props) {
   const [tick, setTick] = useState(0);
   const [celebratingKeys, setCelebratingKeys] = useState(new Set<string>());
+  const [exitGen, setExitGen] = useState(0); // exit 애니메이션 완료 시 increment → FLIP 재실행
   const [tip, setTip] = useState<TipState>({ visible: false, x: 0, y: 0, ev: null });
 
   const celebrateTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const colRefsRef = useRef(new Map<string, React.RefObject<HTMLDivElement | null>>());
+  const everSeenKeysRef = useRef(new Set<string>());
   const getColRef = (key: string): React.RefObject<HTMLDivElement | null> => {
     if (!colRefsRef.current.has(key)) {
       colRefsRef.current.set(key, createRef<HTMLDivElement>());
@@ -113,7 +115,11 @@ export function AgentDashboard({ agentStates, events, viewMode }: Props) {
       const el = colRef.current;
       if (!el) continue;
       // Skip elements that are entering or exiting (TransitionGroup handles those)
-      if (el.classList.contains('agent-col-enter') || el.classList.contains('agent-col-exit')) continue;
+      if (
+        el.classList.contains('agent-col-enter') ||
+        el.classList.contains('agent-col-exit') ||
+        el.classList.contains('agent-col-no-enter-exit')
+      ) continue;
 
       const rect = el.getBoundingClientRect();
       newPositions.set(key, { x: rect.left, y: rect.top });
@@ -127,21 +133,46 @@ export function AgentDashboard({ agentStates, events, viewMode }: Props) {
       }
     }
 
+    // 슈퍼히어로 랜딩 중인 새 카드는 위치 기록을 건너뜀 → 애니메이션 종료 후 기록해 다음 이동 시 FLIP 가능하게 함
+    for (const [key, colRef] of colRefsRef.current) {
+      const el = colRef.current;
+      if (!el || !el.classList.contains('agent-col-enter')) continue;
+      const k = key;
+      const ref = colRef;
+      setTimeout(() => {
+        const e = ref.current;
+        if (e && e.isConnected) {
+          const r = e.getBoundingClientRect();
+          prevPositionsRef.current.set(k, { x: r.left, y: r.top });
+        }
+      }, 750);
+    }
+
     if (toAnimate.length > 0) {
-      // Force reflow to commit the inverted transforms before animating
+      // 역방향 transform 확정 (reflow)
       if (firstEl) firstEl.getBoundingClientRect();
 
-      // Step 3: play — animate each element to its final position
-      for (const el of toAnimate) {
-        el.style.transition = 'transform 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-        el.style.transform = '';
-        el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
-      }
+      // Step 3: RAF로 다음 프레임에서 트랜지션 시작
+      // (같은 프레임 안에서 transition + transform 동시 변경 시 브라우저가 애니메이션을 건너뛰는 문제 방지)
+      const captured = toAnimate.slice();
+      requestAnimationFrame(() => {
+        for (const el of captured) {
+          el.style.transition = 'transform 0.42s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+          el.style.transform = '';
+          el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+        }
+      });
     }
 
     prevPositionsRef.current = newPositions;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainAgentKeyStr, viewMode]);
+  }, [mainAgentKeyStr, viewMode, exitGen]);
+
+  // 현재 렌더에 있는 키를 "이미 본 키"로 기록 (다음 렌더에서 isNew 판별에 사용)
+  useLayoutEffect(() => {
+    mainAgents.forEach(([k]) => everSeenKeysRef.current.add(k));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainAgentKeyStr]);
 
   const handleMouseEnterFeedItem = useCallback((el: HTMLElement, ev: HookEvent) => {
     const inp = ev.payload?.tool_input;
@@ -184,9 +215,10 @@ export function AgentDashboard({ agentStates, events, viewMode }: Props) {
       ) : (
         <TransitionGroup component="div" className={`columns-container${viewMode === 'card' ? ' grid-mode' : ''}`}>
           {mainAgents.map(([key, agent]) => {
+            const isNew = !everSeenKeysRef.current.has(key);
             const nodeRef = getColRef(key);
             return (
-              <CSSTransition key={key} nodeRef={nodeRef as React.RefObject<HTMLDivElement>} timeout={{ enter: 720, exit: 580 }} classNames="agent-col">
+              <CSSTransition key={key} nodeRef={nodeRef as React.RefObject<HTMLDivElement>} timeout={{ enter: 720, exit: 580 }} classNames={isNew ? 'agent-col' : 'agent-col-no-enter'} onExited={() => setExitGen(g => g + 1)}>
                 <AgentColumn
                   ref={nodeRef}
                   agentKey={key}
