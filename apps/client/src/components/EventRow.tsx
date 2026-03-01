@@ -1,17 +1,16 @@
 import { useState, useMemo, forwardRef } from 'react';
 import type { FC } from 'react';
 import clsx from 'clsx';
-import type { HookEvent, HumanInTheLoopResponse } from '../types';
+import type { HookEvent } from '../types';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { ChatTranscriptModal } from './ChatTranscriptModal';
-import { API_BASE_URL } from '../config';
 import {
   Wrench, CircleCheck, CircleX, Lock, Bell, Square, Play,
   Users, Archive, MessageSquare, LogIn, LogOut,
   Terminal, BookOpen, FilePlus, Pencil, FolderSearch, Search,
   Globe, FileText, Bot, ClipboardList, List, Download, Send,
   Map, CircleHelp, Zap, Plug, Brain, Copy, Check,
-  Package, UserPlus, Clock, Loader2, X,
+  Package, UserPlus,
 } from 'lucide-react';
 import '../styles/event.css';
 
@@ -94,25 +93,12 @@ function getToolInfo(event: HookEvent): { tool: string; detail?: string } | null
   return null;
 }
 
-async function postResponse(eventId: number, payload: Partial<HumanInTheLoopResponse>) {
-  const res = await fetch(`${API_BASE_URL}/events/${eventId}/respond`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to submit response');
-}
-
 export const EventRow = forwardRef<HTMLDivElement, Props>(function EventRow(
   { event, gradientClass, colorClass, appHexColor }, ref
 ) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
   const [copyButtonText, setCopyButtonText] = useState<'copy' | 'copied' | 'failed'>('copy');
-  const [responseText, setResponseText] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasSubmittedResponse, setHasSubmittedResponse] = useState(false);
-  const [localResponse, setLocalResponse] = useState<HumanInTheLoopResponse | null>(null);
 
   const { isMobile } = useMediaQuery();
 
@@ -137,18 +123,6 @@ export const EventRow = forwardRef<HTMLDivElement, Props>(function EventRow(
     return (toolName as string).startsWith('mcp__') ? Plug : (TOOL_ICON_MAP[toolName as string] || Wrench);
   }, [toolName]);
 
-  // HITL
-  const hitlTypeIcon = useMemo((): LucideIcon => {
-    if (!event.humanInTheLoop) return CircleHelp;
-    const map: Record<string, LucideIcon> = { question: CircleHelp, permission: Lock, choice: Zap };
-    return map[event.humanInTheLoop.type] || CircleHelp;
-  }, [event.humanInTheLoop]);
-  const hitlTypeLabel = useMemo(() => {
-    const labels = { question: 'Agent Question', permission: 'Permission Request', choice: 'Choice Required' };
-    return event.humanInTheLoop ? (labels[event.humanInTheLoop.type] || 'Question') : '';
-  }, [event.humanInTheLoop]);
-  const permissionType = event.payload?.permission_type || null;
-
   const copyPayload = async () => {
     try {
       await navigator.clipboard.writeText(formattedPayload);
@@ -160,181 +134,9 @@ export const EventRow = forwardRef<HTMLDivElement, Props>(function EventRow(
     }
   };
 
-  const submitResponse = async () => {
-    if (!responseText.trim() || !event.id) return;
-    const response: HumanInTheLoopResponse = { response: responseText.trim(), hookEvent: event, respondedAt: Date.now() };
-    setLocalResponse(response);
-    setHasSubmittedResponse(true);
-    const savedText = responseText;
-    setResponseText('');
-    setIsSubmitting(true);
-    try {
-      await postResponse(event.id, response);
-    } catch {
-      setLocalResponse(null);
-      setHasSubmittedResponse(false);
-      setResponseText(savedText);
-      alert('Failed to submit response. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const submitPermission = async (approved: boolean) => {
-    if (!event.id) return;
-    const response: HumanInTheLoopResponse = { permission: approved, hookEvent: event, respondedAt: Date.now() };
-    setLocalResponse(response);
-    setHasSubmittedResponse(true);
-    setIsSubmitting(true);
-    try {
-      await postResponse(event.id, response);
-    } catch {
-      setLocalResponse(null);
-      setHasSubmittedResponse(false);
-      alert('Failed to submit permission. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const submitChoice = async (choice: string) => {
-    if (!event.id) return;
-    const response: HumanInTheLoopResponse = { choice, hookEvent: event, respondedAt: Date.now() };
-    setLocalResponse(response);
-    setHasSubmittedResponse(true);
-    setIsSubmitting(true);
-    try {
-      await postResponse(event.id, response);
-    } catch {
-      setLocalResponse(null);
-      setHasSubmittedResponse(false);
-      alert('Failed to submit choice. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const responded = hasSubmittedResponse || event.humanInTheLoopStatus?.status === 'responded';
-  const HitlIcon = hitlTypeIcon;
-
   return (
     <div ref={ref}>
-      {/* HITL section */}
-      {event.humanInTheLoop && (event.humanInTheLoopStatus?.status === 'pending' || hasSubmittedResponse) && (
-        <div
-          className={clsx('mb-4 p-4 rounded-lg border-2 shadow-lg', responded
-            ? 'border-green-500 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20'
-            : 'border-yellow-500 bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 animate-pulse-slow'
-          )}
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <HitlIcon size={22} className="flex-shrink-0" />
-                <h3 className={clsx('text-lg font-bold', responded ? 'text-green-900 dark:text-green-100' : 'text-yellow-900 dark:text-yellow-100')}>
-                  {hitlTypeLabel}
-                </h3>
-                {permissionType && (
-                  <span className="text-xs font-mono font-semibold px-2 py-1 rounded border-2 bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-900 dark:text-blue-100">
-                    {permissionType}
-                  </span>
-                )}
-              </div>
-              {!responded && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-300">
-                  <Clock size={12} className="flex-shrink-0" /> Waiting for response...
-                </span>
-              )}
-            </div>
-            <div className="flex items-center space-x-2 ml-9">
-              <span className="text-xs font-semibold text-[var(--theme-text-primary)] px-1.5 py-0.5 rounded-full border-2 bg-[var(--theme-bg-tertiary)] shadow-sm" style={{ ...appBgStyle, ...appBorderStyle }}>{event.source_app}</span>
-              <span className={clsx('text-xs text-[var(--theme-text-secondary)] px-1.5 py-0.5 rounded-full border bg-[var(--theme-bg-tertiary)]/50 shadow-sm', borderColorClass)}>{sessionIdShort}</span>
-              <span className="text-xs text-[var(--theme-text-tertiary)] font-medium">{formatTime(event.timestamp)}</span>
-            </div>
-          </div>
-          <div className={clsx('mb-4 p-3 bg-white dark:bg-gray-800 rounded-lg border', responded ? 'border-green-300' : 'border-yellow-300')}>
-            <p className="text-base font-medium text-gray-900 dark:text-gray-100">{event.humanInTheLoop.question}</p>
-          </div>
-          {(localResponse || (responded && event.humanInTheLoopStatus?.response)) && (
-            <div className="mb-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-green-400">
-              <div className="flex items-center mb-2">
-                <CircleCheck size={20} className="mr-2 text-green-600 flex-shrink-0" />
-                <strong className="text-green-900 dark:text-green-100">Your Response:</strong>
-              </div>
-              {(localResponse?.response || event.humanInTheLoopStatus?.response?.response) && (
-                <div className="text-gray-900 dark:text-gray-100 ml-7">
-                  {localResponse?.response || event.humanInTheLoopStatus?.response?.response}
-                </div>
-              )}
-              {(localResponse?.permission !== undefined || event.humanInTheLoopStatus?.response?.permission !== undefined) && (
-                <div className="ml-7 flex items-center gap-1">
-                  {(localResponse?.permission ?? event.humanInTheLoopStatus?.response?.permission) ? (
-                    <><CircleCheck size={14} className="text-green-600 flex-shrink-0" /><span className="text-gray-900 dark:text-gray-100">Approved</span></>
-                  ) : (
-                    <><CircleX size={14} className="text-red-600 flex-shrink-0" /><span className="text-gray-900 dark:text-gray-100">Denied</span></>
-                  )}
-                </div>
-              )}
-              {(localResponse?.choice || event.humanInTheLoopStatus?.response?.choice) && (
-                <div className="text-gray-900 dark:text-gray-100 ml-7">
-                  {localResponse?.choice || event.humanInTheLoopStatus?.response?.choice}
-                </div>
-              )}
-            </div>
-          )}
-          {event.humanInTheLoop.type === 'question' && (
-            <div>
-              <textarea
-                value={responseText}
-                onChange={e => setResponseText(e.target.value)}
-                className="w-full p-3 border-2 border-yellow-500 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
-                rows={3}
-                placeholder="Type your response here..."
-                onClick={e => e.stopPropagation()}
-              />
-              <div className="flex justify-end space-x-2 mt-2">
-                <button onClick={e => { e.stopPropagation(); submitResponse(); }} disabled={!responseText.trim() || isSubmitting || hasSubmittedResponse}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none disabled:cursor-not-allowed flex items-center gap-1.5">
-                  {isSubmitting ? <Loader2 size={13} className="animate-spin flex-shrink-0" /> : <Send size={13} className="flex-shrink-0" />}
-                  <span>{isSubmitting ? 'Sending...' : 'Submit Response'}</span>
-                </button>
-              </div>
-            </div>
-          )}
-          {event.humanInTheLoop.type === 'permission' && (
-            <div className="flex justify-end items-center space-x-3">
-              {responded && (
-                <div className="flex items-center px-3 py-2 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500">
-                  <span className="text-sm font-bold text-green-900 dark:text-green-100">Responded</span>
-                </div>
-              )}
-              <button onClick={e => { e.stopPropagation(); submitPermission(false); }} disabled={isSubmitting || hasSubmittedResponse}
-                className={clsx('px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center gap-1.5', hasSubmittedResponse && 'opacity-40 cursor-not-allowed')}>
-                {isSubmitting ? <Loader2 size={13} className="animate-spin flex-shrink-0" /> : <><X size={13} className="flex-shrink-0" /><span>Deny</span></>}
-              </button>
-              <button onClick={e => { e.stopPropagation(); submitPermission(true); }} disabled={isSubmitting || hasSubmittedResponse}
-                className={clsx('px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center gap-1.5', hasSubmittedResponse && 'opacity-40 cursor-not-allowed')}>
-                {isSubmitting ? <Loader2 size={13} className="animate-spin flex-shrink-0" /> : <><CircleCheck size={13} className="flex-shrink-0" /><span>Approve</span></>}
-              </button>
-            </div>
-          )}
-          {event.humanInTheLoop.type === 'choice' && (
-            <div className="flex flex-wrap gap-2 justify-end">
-              {event.humanInTheLoop.choices?.map(choice => (
-                <button key={choice} onClick={e => { e.stopPropagation(); submitChoice(choice); }} disabled={isSubmitting || hasSubmittedResponse}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none">
-                  {isSubmitting ? '⏳' : choice}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Original event row */}
-      {!event.humanInTheLoop && (
-        <div
+      <div
           className={clsx('group relative p-2 mobile:p-1.5 rounded-lg transition-all duration-300 cursor-pointer border border-[var(--theme-border-primary)] hover:border-[var(--theme-primary)] bg-gradient-to-r from-[var(--theme-bg-primary)] to-[var(--theme-bg-secondary)]', isExpanded && 'ring-1 ring-[var(--theme-primary)] border-[var(--theme-primary)]')}
           onClick={() => setIsExpanded(!isExpanded)}
         >
@@ -441,7 +243,6 @@ export const EventRow = forwardRef<HTMLDivElement, Props>(function EventRow(
             )}
           </div>
         </div>
-      )}
       {event.chat && event.chat.length > 0 && (
         <ChatTranscriptModal isOpen={showChatModal} chat={event.chat} onClose={() => setShowChatModal(false)} />
       )}
