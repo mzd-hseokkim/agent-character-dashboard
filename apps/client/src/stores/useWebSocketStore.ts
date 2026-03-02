@@ -50,6 +50,18 @@ interface WebSocketStore {
 
 const MAX_EVENTS = parseInt(import.meta.env.VITE_MAX_EVENTS_TO_DISPLAY || '300');
 
+// ─── 캐릭터 매핑 localStorage 헬퍼 ──────────────────────────────────────────
+const CHAR_MAP_KEY = 'agent-character-map';
+
+function getCharMap(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(CHAR_MAP_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function saveCharMap(map: Record<string, string>) {
+  localStorage.setItem(CHAR_MAP_KEY, JSON.stringify(map));
+}
+
 function sound() {
   return useSoundStore.getState();
 }
@@ -103,7 +115,32 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
 
   _setAgentStates: (states) => {
     const prev = get().agentStates;
-    set({ agentStates: states });
+
+    // localStorage 캐릭터 매핑 적용:
+    // - 재등장 에이전트(prev에 없음)의 characterId가 localStorage 값과 다르면 localStorage 값 사용
+    // - 이미 있던 에이전트 캐릭터 변경(수동 cycle)은 localStorage 업데이트
+    const charMap = getCharMap();
+    const charMapUpdates: Record<string, string> = {};
+    const corrected = { ...states };
+
+    for (const [key, agent] of Object.entries(states)) {
+      if (agent.isSubagent) continue;
+      const savedCharId = charMap[key];
+      if (!savedCharId) {
+        charMapUpdates[key] = agent.characterId;
+      } else if (agent.characterId !== savedCharId && !prev[key]) {
+        // 재등장 + 캐릭터 불일치 → localStorage 값으로 덮어쓰기
+        corrected[key] = { ...agent, characterId: savedCharId };
+      } else {
+        // 동일하거나 수동 cycle → localStorage 업데이트
+        charMapUpdates[key] = agent.characterId;
+      }
+    }
+    if (Object.keys(charMapUpdates).length > 0) {
+      saveCharMap({ ...charMap, ...charMapUpdates });
+    }
+
+    set({ agentStates: corrected });
 
     const { isMuted, playSound } = sound();
     if (isMuted) return;
