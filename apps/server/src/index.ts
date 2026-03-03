@@ -170,8 +170,11 @@ function updateAgentState(sourceApp: string, sessionId: string, eventType: strin
 
   // 신규 세션: 첫 이벤트로 서브에이전트 여부 판별
   // 메모리에 없어도 DB 기록이 있으면 그걸 기준으로 판별 (OFFLINE 후 재접속 케이스)
+  // SessionStart가 오면 무조건 메인 에이전트로 재설정 (resume 세션 대응)
   let isSubagent: boolean;
-  if (existing) {
+  if (AGENT_FIRST_EVENTS.has(eventType)) {
+    isSubagent = false;
+  } else if (existing) {
     isSubagent = existing.isSubagent;
   } else {
     const dbFirst = db.prepare(
