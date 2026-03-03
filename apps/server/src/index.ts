@@ -55,7 +55,17 @@ function loadAllCharacterIds(): string[] {
   return [...defaults, ...CANVAS_FALLBACK_IDS.filter(id => !defaults.includes(id))];
 }
 
-let characterCounter = 0;
+function initCharacterCounter(): number {
+  const defaultIds = loadDefaultCharacterIds();
+  if (defaultIds.length === 0) return 0;
+  // INSERT OR REPLACE는 rowid를 갱신하므로, rowid DESC = 마지막 할당/변경된 캐릭터
+  const row = db.prepare('SELECT character_id FROM agent_characters ORDER BY rowid DESC LIMIT 1').get() as { character_id: string } | null;
+  if (!row) return 0;
+  const idx = defaultIds.indexOf(row.character_id);
+  return idx === -1 ? 0 : idx + 1; // 마지막 캐릭터의 다음 index부터 시작
+}
+
+let characterCounter = initCharacterCounter();
 let taskCounter = 0;
 
 // 서브에이전트 판별: 첫 이벤트가 UserPromptSubmit/SessionStart이 아니면 서브에이전트
@@ -457,6 +467,10 @@ const server = Bun.serve({
         agentStates.set(agentKey, { ...state, characterId: nextCharId });
         // DB에도 반영하여 재접속 시 수동 변경 사항 유지
         db.prepare('INSERT OR REPLACE INTO agent_characters (agent_key, character_id) VALUES (?, ?)').run(agentKey, nextCharId);
+        // 다음 신규 세션이 이 캐릭터의 다음 것을 받도록 카운터 갱신
+        const defaultIdsForCounter = loadDefaultCharacterIds();
+        const nextIdxInDefault = defaultIdsForCounter.indexOf(nextCharId);
+        if (nextIdxInDefault !== -1) characterCounter = nextIdxInDefault + 1;
         broadcastAgentStates();
         return new Response(JSON.stringify({ characterId: nextCharId }), {
           headers: { ...headers, 'Content-Type': 'application/json' }
